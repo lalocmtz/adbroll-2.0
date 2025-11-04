@@ -11,6 +11,7 @@ import Templates from "./pages/Templates";
 import Broll from "./pages/Broll";
 import Brands from "./pages/Brands";
 import NotFound from "./pages/NotFound";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -22,37 +23,45 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<Login />} />
+          <Route path="/auth" element={<Login />} />
           <Route
             path="/dashboard"
             element={
-              <Layout>
-                <Dashboard />
-              </Layout>
+              <ProtectedRoute>
+                <Layout>
+                  <Dashboard />
+                </Layout>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/templates"
             element={
-              <Layout>
-                <Templates />
-              </Layout>
+              <ProtectedRoute>
+                <Layout>
+                  <Templates />
+                </Layout>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/broll"
             element={
-              <Layout>
-                <Broll />
-              </Layout>
+              <ProtectedRoute>
+                <Layout>
+                  <Broll />
+                </Layout>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/brands"
             element={
-              <Layout>
-                <Brands />
-              </Layout>
+              <ProtectedRoute>
+                <Layout>
+                  <Brands />
+                </Layout>
+              </ProtectedRoute>
             }
           />
           <Route path="*" element={<NotFound />} />

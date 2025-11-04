@@ -19,8 +19,14 @@ export type Database = {
           color_palette: Json | null
           created_at: string
           id: string
+          ideal_customer: string | null
           logo_url: string | null
+          main_benefit: string | null
+          main_objection: string | null
+          main_promise: string | null
           name: string
+          product_description: string | null
+          tone_of_voice: string | null
           updated_at: string
           user_id: string
           website_url: string | null
@@ -29,8 +35,14 @@ export type Database = {
           color_palette?: Json | null
           created_at?: string
           id?: string
+          ideal_customer?: string | null
           logo_url?: string | null
+          main_benefit?: string | null
+          main_objection?: string | null
+          main_promise?: string | null
           name: string
+          product_description?: string | null
+          tone_of_voice?: string | null
           updated_at?: string
           user_id: string
           website_url?: string | null
@@ -39,13 +51,75 @@ export type Database = {
           color_palette?: Json | null
           created_at?: string
           id?: string
+          ideal_customer?: string | null
           logo_url?: string | null
+          main_benefit?: string | null
+          main_objection?: string | null
+          main_promise?: string | null
           name?: string
+          product_description?: string | null
+          tone_of_voice?: string | null
           updated_at?: string
           user_id?: string
           website_url?: string | null
         }
         Relationships: []
+      }
+      broll_files: {
+        Row: {
+          brand_id: string | null
+          created_at: string | null
+          duration: number | null
+          file_size: number | null
+          file_url: string
+          folder: string
+          id: string
+          metadata: Json | null
+          mime_type: string | null
+          name: string
+          thumbnail_url: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          brand_id?: string | null
+          created_at?: string | null
+          duration?: number | null
+          file_size?: number | null
+          file_url: string
+          folder?: string
+          id?: string
+          metadata?: Json | null
+          mime_type?: string | null
+          name: string
+          thumbnail_url?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          brand_id?: string | null
+          created_at?: string | null
+          duration?: number | null
+          file_size?: number | null
+          file_url?: string
+          folder?: string
+          id?: string
+          metadata?: Json | null
+          mime_type?: string | null
+          name?: string
+          thumbnail_url?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broll_files_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       clips: {
         Row: {
@@ -135,10 +209,13 @@ export type Database = {
       }
       projects: {
         Row: {
+          analysis_id: string | null
           brand_id: string | null
           created_at: string
+          generated_script: string | null
           id: string
           name: string
+          script_approved: boolean | null
           slots_data: Json | null
           status: Database["public"]["Enums"]["project_status"] | null
           template_id: string | null
@@ -148,10 +225,13 @@ export type Database = {
           voice_id: string | null
         }
         Insert: {
+          analysis_id?: string | null
           brand_id?: string | null
           created_at?: string
+          generated_script?: string | null
           id?: string
           name: string
+          script_approved?: boolean | null
           slots_data?: Json | null
           status?: Database["public"]["Enums"]["project_status"] | null
           template_id?: string | null
@@ -161,10 +241,13 @@ export type Database = {
           voice_id?: string | null
         }
         Update: {
+          analysis_id?: string | null
           brand_id?: string | null
           created_at?: string
+          generated_script?: string | null
           id?: string
           name?: string
+          script_approved?: boolean | null
           slots_data?: Json | null
           status?: Database["public"]["Enums"]["project_status"] | null
           template_id?: string | null
@@ -174,6 +257,13 @@ export type Database = {
           voice_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "projects_analysis_id_fkey"
+            columns: ["analysis_id"]
+            isOneToOne: false
+            referencedRelation: "video_analyses"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "projects_brand_id_fkey"
             columns: ["brand_id"]
@@ -269,6 +359,53 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      video_analyses: {
+        Row: {
+          brand_id: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          metadata: Json | null
+          source_url: string
+          status: string | null
+          structure: Json
+          transcription: string | null
+          user_id: string
+        }
+        Insert: {
+          brand_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          metadata?: Json | null
+          source_url: string
+          status?: string | null
+          structure?: Json
+          transcription?: string | null
+          user_id: string
+        }
+        Update: {
+          brand_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          metadata?: Json | null
+          source_url?: string
+          status?: string | null
+          structure?: Json
+          transcription?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_analyses_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
             referencedColumns: ["id"]
           },
         ]

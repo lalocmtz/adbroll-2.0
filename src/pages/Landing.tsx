@@ -92,16 +92,18 @@ const Landing = () => {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <span className="font-extrabold text-xl">adbroll</span>
           <nav className="flex items-center gap-6">
-            <Link to="/login" className="text-sm font-medium hover:text-foreground transition-smooth">
+            <Link to="/auth" className="text-sm font-medium hover:text-foreground transition-smooth">
               Iniciar
             </Link>
-            <Link to="/login" className="text-sm font-medium hover:text-foreground transition-smooth">
+            <Link to="/auth" className="text-sm font-medium hover:text-foreground transition-smooth">
               Precio
             </Link>
-            <Link to="/login" className="text-sm font-medium hover:text-foreground transition-smooth">
+            <Link to="/auth" className="text-sm font-medium hover:text-foreground transition-smooth">
               Log in
             </Link>
-            <Button className="btn-primary">Empezar gratis</Button>
+            <Button className="btn-primary" onClick={() => window.location.href = '/auth'}>
+              Empezar gratis
+            </Button>
           </nav>
         </div>
       </header>
@@ -119,7 +121,10 @@ const Landing = () => {
           Usa nuestras plantillas ganadoras o pega el link de tu video viral y la
           inteligencia IA estructura todo para crear tus variantes en minutos.
         </p>
-        <Button className="btn-primary text-lg px-8 py-6">
+        <Button 
+          className="btn-primary text-lg px-8 py-6"
+          onClick={() => window.location.href = '/auth'}
+        >
           Crear tus primeros variantes
         </Button>
         <p className="text-sm text-muted-foreground mt-4">

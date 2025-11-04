@@ -1,9 +1,11 @@
 import { ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { Video, LayoutTemplate, FileVideo, HelpCircle, Settings, Menu, X } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Video, LayoutTemplate, FileVideo, HelpCircle, Settings, Menu, X, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 interface LayoutProps {
   children: ReactNode;
@@ -18,7 +20,19 @@ const navItems = [
 
 const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { signOut, user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  const handleLogout = async () => {
+    const { error } = await signOut();
+    if (error) {
+      toast.error("Error al cerrar sesión");
+    } else {
+      toast.success("Sesión cerrada");
+      navigate("/auth");
+    }
+  };
 
   return (
     <div className="min-h-screen flex w-full bg-background">
@@ -78,19 +92,26 @@ const Layout = ({ children }: LayoutProps) => {
             
             {sidebarOpen && (
               <div className="mt-4 pt-4 border-t border-border">
-                <p className="text-xs text-muted-foreground mb-2">No hay suscripción activa</p>
-                <Button variant="outline" size="sm" className="w-full">
-                  Manage plan
-                </Button>
-                <div className="mt-4 flex items-center gap-3">
+                <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center">
-                    <span className="font-semibold text-white">EC</span>
+                    <span className="font-semibold text-white">
+                      {user?.email?.charAt(0).toUpperCase() || 'U'}
+                    </span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">Eduardo Corona</p>
-                    <p className="text-xs text-muted-foreground truncate">lalocmtz@gmail.com</p>
+                    <p className="text-sm font-medium truncate">{user?.user_metadata?.full_name || 'Usuario'}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                   </div>
                 </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full"
+                  onClick={handleLogout}
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Cerrar Sesión
+                </Button>
               </div>
             )}
           </div>
