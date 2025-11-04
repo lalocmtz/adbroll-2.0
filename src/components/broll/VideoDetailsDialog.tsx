@@ -10,6 +10,7 @@ interface BrollFile {
   file_size: number | null;
   created_at: string;
   mime_type: string | null;
+  thumbnail_url: string | null;
 }
 
 interface VideoDetailsDialogProps {
@@ -54,6 +55,7 @@ export function VideoDetailsDialog({ video, open, onOpenChange }: VideoDetailsDi
           <div className="bg-black rounded-lg overflow-hidden">
             <video
               src={video.file_url}
+              poster={video.thumbnail_url || undefined}
               controls
               className="w-full"
               controlsList="nodownload"

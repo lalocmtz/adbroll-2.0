@@ -60,6 +60,7 @@ interface BrollFile {
   folder_id: string | null;
   brand_id: string | null;
   mime_type: string | null;
+  thumbnail_url: string | null;
 }
 
 export default function Broll() {

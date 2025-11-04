@@ -95,7 +95,7 @@ export function VideoUploadDialog({
         .from("broll")
         .getPublicUrl(fileName);
 
-      const { error: dbError } = await supabase
+      const { data: insertData, error: dbError } = await supabase
         .from("broll_files")
         .insert({
           user_id: user.id,
@@ -105,9 +105,30 @@ export function VideoUploadDialog({
           file_url: urlData.publicUrl,
           mime_type: file.type,
           file_size: file.size,
-        });
+        })
+        .select()
+        .single();
 
       if (dbError) throw dbError;
+
+      // Generate thumbnail in background
+      if (insertData) {
+        supabase.functions
+          .invoke("generate-thumbnail", {
+            body: {
+              fileId: insertData.id,
+              fileUrl: urlData.publicUrl,
+              fileName: file.name,
+            },
+          })
+          .then(({ error: thumbError }) => {
+            if (thumbError) {
+              console.error("Thumbnail generation error:", thumbError);
+            } else {
+              queryClient.invalidateQueries({ queryKey: ["broll-files"] });
+            }
+          });
+      }
 
       toast.success("Video subido exitosamente");
       queryClient.invalidateQueries({ queryKey: ["broll-files"] });
