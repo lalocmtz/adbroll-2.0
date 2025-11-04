@@ -91,10 +91,7 @@ export function VideoUploadDialog({
 
       if (uploadError) throw uploadError;
 
-      const { data: urlData } = supabase.storage
-        .from("broll")
-        .getPublicUrl(fileName);
-
+      // Guardar storage_path en lugar de URL pública (el bucket es privado)
       const { data: insertData, error: dbError } = await supabase
         .from("broll_files")
         .insert({
@@ -102,7 +99,7 @@ export function VideoUploadDialog({
           brand_id: brandId,
           folder_id: folderId,
           name: name.trim(),
-          file_url: urlData.publicUrl,
+          storage_path: fileName,
           mime_type: file.type,
           file_size: file.size,
         })
