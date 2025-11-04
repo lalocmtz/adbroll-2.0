@@ -71,13 +71,14 @@ export type Database = {
           created_at: string | null
           duration: number | null
           file_size: number | null
-          file_url: string
+          file_url: string | null
           folder: string
           folder_id: string | null
           id: string
           metadata: Json | null
           mime_type: string | null
           name: string
+          storage_path: string | null
           thumbnail_url: string | null
           updated_at: string | null
           user_id: string
@@ -87,13 +88,14 @@ export type Database = {
           created_at?: string | null
           duration?: number | null
           file_size?: number | null
-          file_url: string
+          file_url?: string | null
           folder?: string
           folder_id?: string | null
           id?: string
           metadata?: Json | null
           mime_type?: string | null
           name: string
+          storage_path?: string | null
           thumbnail_url?: string | null
           updated_at?: string | null
           user_id: string
@@ -103,13 +105,14 @@ export type Database = {
           created_at?: string | null
           duration?: number | null
           file_size?: number | null
-          file_url?: string
+          file_url?: string | null
           folder?: string
           folder_id?: string | null
           id?: string
           metadata?: Json | null
           mime_type?: string | null
           name?: string
+          storage_path?: string | null
           thumbnail_url?: string | null
           updated_at?: string | null
           user_id?: string

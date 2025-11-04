@@ -54,6 +54,7 @@ interface BrollFile {
   id: string;
   name: string;
   file_url: string;
+  storage_path: string | null;
   duration: number | null;
   file_size: number | null;
   created_at: string;

@@ -1,11 +1,13 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Clock, HardDrive, Calendar } from "lucide-react";
+import { useSignedUrl } from "@/hooks/useSignedUrl";
 
 interface BrollFile {
   id: string;
   name: string;
   file_url: string;
+  storage_path: string | null;
   duration: number | null;
   file_size: number | null;
   created_at: string;
@@ -21,6 +23,9 @@ interface VideoDetailsDialogProps {
 
 export function VideoDetailsDialog({ video, open, onOpenChange }: VideoDetailsDialogProps) {
   if (!video) return null;
+
+  // Generate signed URL for private video
+  const { signedUrl, loading, error } = useSignedUrl(video.storage_path);
 
   const formatFileSize = (bytes: number | null) => {
     if (!bytes) return "—";
@@ -53,15 +58,29 @@ export function VideoDetailsDialog({ video, open, onOpenChange }: VideoDetailsDi
         <div className="space-y-4">
           {/* Video Player */}
           <div className="bg-black rounded-lg overflow-hidden">
-            <video
-              src={video.file_url}
-              poster={video.thumbnail_url || undefined}
-              controls
-              className="w-full"
-              controlsList="nodownload"
-            >
-              Tu navegador no soporta la reproducción de videos.
-            </video>
+            {loading ? (
+              <div className="aspect-video flex items-center justify-center text-muted-foreground">
+                Cargando video...
+              </div>
+            ) : error ? (
+              <div className="aspect-video flex items-center justify-center text-destructive">
+                Error al cargar video: {error}
+              </div>
+            ) : signedUrl ? (
+              <video
+                src={signedUrl}
+                poster={video.thumbnail_url || undefined}
+                controls
+                className="w-full"
+                controlsList="nodownload"
+              >
+                Tu navegador no soporta la reproducción de videos.
+              </video>
+            ) : (
+              <div className="aspect-video flex items-center justify-center text-muted-foreground">
+                No se pudo cargar el video
+              </div>
+            )}
           </div>
 
           {/* Metadata */}
@@ -86,16 +105,18 @@ export function VideoDetailsDialog({ video, open, onOpenChange }: VideoDetailsDi
           <div className="flex justify-end">
             <Button
               variant="outline"
+              disabled={!signedUrl || loading}
               onClick={() => {
+                if (!signedUrl) return;
                 const a = document.createElement("a");
-                a.href = video.file_url;
+                a.href = signedUrl;
                 a.download = video.name;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
               }}
             >
-              Descargar
+              {loading ? "Cargando..." : "Descargar"}
             </Button>
           </div>
         </div>
