@@ -17,26 +17,31 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { fileId, fileUrl, fileName } = await req.json();
+    const { fileId, filePath, fileName } = await req.json();
 
-    if (!fileId || !fileUrl || !fileName) {
-      throw new Error('Missing required parameters: fileId, fileUrl, fileName');
+    if (!fileId || !filePath || !fileName) {
+      throw new Error('Missing required parameters: fileId, filePath, fileName');
     }
 
-    console.log(`Generating thumbnail for file: ${fileName}`);
+    console.log(`Generating thumbnail for file: ${fileName} (path: ${filePath})`);
 
-    // Download the video file
-    const videoResponse = await fetch(fileUrl);
-    if (!videoResponse.ok) {
-      throw new Error(`Failed to download video: ${videoResponse.statusText}`);
+    // Download the video file from private storage
+    const { data: videoData, error: downloadError } = await supabase.storage
+      .from('broll')
+      .download(filePath);
+
+    if (downloadError || !videoData) {
+      console.error('Download error:', downloadError);
+      throw new Error(`Failed to download video: ${downloadError?.message || 'Unknown error'}`);
     }
 
-    const videoBlob = await videoResponse.blob();
+    console.log('Video downloaded, saving to temp file...');
+
     const videoPath = `/tmp/${Date.now()}_${fileName}`;
     const thumbnailPath = `/tmp/${Date.now()}_thumb.jpg`;
 
     // Write video to temp file
-    await Deno.writeFile(videoPath, new Uint8Array(await videoBlob.arrayBuffer()));
+    await Deno.writeFile(videoPath, new Uint8Array(await videoData.arrayBuffer()));
 
     console.log('Video downloaded, generating thumbnail with FFmpeg...');
 

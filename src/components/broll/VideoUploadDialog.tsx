@@ -117,7 +117,7 @@ export function VideoUploadDialog({
           .invoke("generate-thumbnail", {
             body: {
               fileId: insertData.id,
-              fileUrl: urlData.publicUrl,
+              filePath: fileName, // This is the storage path like "user-id/timestamp.ext"
               fileName: file.name,
             },
           })
