@@ -8,6 +8,7 @@ import { Upload, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { generateVideoThumbnail, getVideoDuration } from "@/utils/videoThumbnail";
 
 interface Folder {
   id: string;
@@ -82,52 +83,61 @@ export function VideoUploadDialog({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No autenticado");
 
+      // 1. Generar thumbnail en el cliente (Canvas API)
+      console.log("Generando thumbnail del video...");
+      const thumbnailBlob = await generateVideoThumbnail(file, 1.0);
+      
+      // 2. Obtener duración del video
+      const duration = await getVideoDuration(file);
+
+      // 3. Subir el video
       const fileExt = file.name.split(".").pop();
-      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+      const timestamp = Date.now();
+      const videoFileName = `${user.id}/${timestamp}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from("broll")
-        .upload(fileName, file);
+        .upload(videoFileName, file);
 
       if (uploadError) throw uploadError;
 
-      // Guardar storage_path en lugar de URL pública (el bucket es privado)
-      const { data: insertData, error: dbError } = await supabase
+      // 4. Subir el thumbnail al bucket público
+      const thumbnailFileName = `${user.id}/${timestamp}.jpg`;
+      const { error: thumbUploadError } = await supabase.storage
+        .from("thumbnails")
+        .upload(thumbnailFileName, thumbnailBlob, {
+          contentType: "image/jpeg",
+          upsert: true,
+        });
+
+      if (thumbUploadError) {
+        console.error("Error subiendo thumbnail:", thumbUploadError);
+        // No bloqueamos la subida si falla el thumbnail
+      }
+
+      // 5. Obtener URL pública del thumbnail
+      const { data: thumbUrlData } = supabase.storage
+        .from("thumbnails")
+        .getPublicUrl(thumbnailFileName);
+
+      // 6. Guardar en base de datos
+      const { error: dbError } = await supabase
         .from("broll_files")
         .insert({
           user_id: user.id,
           brand_id: brandId,
           folder_id: folderId,
           name: name.trim(),
-          storage_path: fileName,
+          storage_path: videoFileName,
           mime_type: file.type,
           file_size: file.size,
-        })
-        .select()
-        .single();
+          duration: duration,
+          thumbnail_url: thumbUploadError ? null : thumbUrlData.publicUrl,
+        });
 
       if (dbError) throw dbError;
 
-      // Generate thumbnail in background
-      if (insertData) {
-        supabase.functions
-          .invoke("generate-thumbnail", {
-            body: {
-              fileId: insertData.id,
-              filePath: fileName, // This is the storage path like "user-id/timestamp.ext"
-              fileName: file.name,
-            },
-          })
-          .then(({ error: thumbError }) => {
-            if (thumbError) {
-              console.error("Thumbnail generation error:", thumbError);
-            } else {
-              queryClient.invalidateQueries({ queryKey: ["broll-files"] });
-            }
-          });
-      }
-
-      toast.success("Video subido exitosamente");
+      toast.success("Video y thumbnail subidos exitosamente");
       queryClient.invalidateQueries({ queryKey: ["broll-files"] });
       onOpenChange(false);
       resetForm();
@@ -248,7 +258,7 @@ export function VideoUploadDialog({
               disabled={!file || !name.trim() || !folderId || uploading}
               className="flex-1"
             >
-              {uploading ? "Subiendo..." : "Subir Video"}
+              {uploading ? "Procesando..." : "Subir Video"}
             </Button>
           </div>
         </div>
