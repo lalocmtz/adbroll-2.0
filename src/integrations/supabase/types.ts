@@ -73,6 +73,7 @@ export type Database = {
           file_size: number | null
           file_url: string
           folder: string
+          folder_id: string | null
           id: string
           metadata: Json | null
           mime_type: string | null
@@ -88,6 +89,7 @@ export type Database = {
           file_size?: number | null
           file_url: string
           folder?: string
+          folder_id?: string | null
           id?: string
           metadata?: Json | null
           mime_type?: string | null
@@ -103,6 +105,7 @@ export type Database = {
           file_size?: number | null
           file_url?: string
           folder?: string
+          folder_id?: string | null
           id?: string
           metadata?: Json | null
           mime_type?: string | null
@@ -114,6 +117,51 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "broll_files_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broll_files_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "broll_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      broll_folders: {
+        Row: {
+          brand_id: string | null
+          created_at: string | null
+          id: string
+          is_default: boolean | null
+          name: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          brand_id?: string | null
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          name: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          brand_id?: string | null
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          name?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broll_folders_brand_id_fkey"
             columns: ["brand_id"]
             isOneToOne: false
             referencedRelation: "brands"
