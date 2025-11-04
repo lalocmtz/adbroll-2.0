@@ -1,1 +1,7 @@
 project_id = "ayvlvkwixkkjkysgeetj"
+
+[functions.analyze-video]
+verify_jwt = true
+
+[functions.generate-script]
+verify_jwt = true

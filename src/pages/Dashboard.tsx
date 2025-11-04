@@ -1,68 +1,165 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
-import { Video, Upload } from "lucide-react";
+import { Video } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { VideoLinkInput } from "@/components/dashboard/VideoLinkInput";
+import { AnalysisResult } from "@/components/dashboard/AnalysisResult";
+import { ScriptVariants } from "@/components/dashboard/ScriptVariants";
 import { toast } from "sonner";
 
-const Dashboard = () => {
-  const [videoUrl, setVideoUrl] = useState("");
+interface Brand {
+  id: string;
+  name: string;
+}
 
-  const handleCloneVideo = () => {
-    if (!videoUrl) {
-      toast.error("Por favor ingresa un link de video");
-      return;
+const Dashboard = () => {
+  const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
+  const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null);
+  const [scriptVariants, setScriptVariants] = useState<any[] | null>(null);
+  const [generatingScripts, setGeneratingScripts] = useState(false);
+
+  // Fetch brands
+  const { data: brands } = useQuery({
+    queryKey: ["brands"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("brands")
+        .select("id, name")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return data as Brand[];
+    },
+  });
+
+  // Set first brand as selected by default
+  if (brands && brands.length > 0 && !selectedBrand) {
+    setSelectedBrand(brands[0].id);
+  }
+
+  const handleAnalysisStart = (analysisId: string) => {
+    setCurrentAnalysisId(analysisId);
+    setScriptVariants(null);
+  };
+
+  const handleGenerateScripts = async (analysisId: string) => {
+    setGeneratingScripts(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-script", {
+        body: {
+          analysis_id: analysisId,
+          variant_count: 3,
+        },
+      });
+
+      if (error) throw error;
+
+      setScriptVariants(data.variants);
+      toast.success("¡Guiones generados exitosamente!");
+    } catch (error: any) {
+      console.error("Error generating scripts:", error);
+      toast.error(error.message || "Error al generar guiones");
+    } finally {
+      setGeneratingScripts(false);
     }
-    toast.success("¡Detectamos magia en ese link!");
-    // TODO: Process video
+  };
+
+  const handleApproveScript = async (variantIndex: number, editedVariant: any) => {
+    toast.success("Guion aprobado. El renderizado se implementará en la siguiente fase.");
+    console.log("Approved variant:", editedVariant);
   };
 
   const templates = [
-    { name: "Unboxing", subtitle: "Tha adlgd gummies" },
-    { name: "Problema + solución", subtitle: "Tha adlgd gummies" },
-    { name: "Lista de beneficios", subtitle: "Tha adlgd gummies" },
-    { name: "Urgencia", subtitle: "Tha adlgd gummies" },
+    { name: "Unboxing", subtitle: "Plantilla clásica" },
+    { name: "Problema + solución", subtitle: "Alto engagement" },
+    { name: "Lista de beneficios", subtitle: "Conversión alta" },
+    { name: "Urgencia", subtitle: "FOMO garantizado" },
   ];
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
-      {/* Hero Section */}
+    <div className="space-y-8">
+      {/* Header */}
       <div>
-        <h1 className="mb-2">¿Qué creamos hoy?</h1>
-        <p className="text-muted-foreground text-lg mb-6">Pega tu link de video</p>
-        <p className="text-sm text-muted-foreground mb-4">
-          Soportamos TikTok, Instagram, YouTube y más
+        <h1 className="text-3xl font-bold mb-2">¿Qué creamos hoy?</h1>
+        <p className="text-muted-foreground">
+          Convierte videos virales en variantes optimizadas para tu marca
         </p>
+      </div>
 
-        <div className="flex gap-3 max-w-2xl">
-          <Input
-            placeholder="Pegar link de tiktok/meta/Youtube"
-            value={videoUrl}
-            onChange={(e) => setVideoUrl(e.target.value)}
-            className="flex-1"
-          />
-          <Button onClick={handleCloneVideo} className="btn-primary">
-            Clonar este video
-          </Button>
+      {/* Brand Selector */}
+      {brands && brands.length > 0 && (
+        <div className="flex items-center gap-4">
+          <label className="text-sm font-medium">Marca activa:</label>
+          <Select value={selectedBrand || ""} onValueChange={setSelectedBrand}>
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder="Selecciona una marca" />
+            </SelectTrigger>
+            <SelectContent>
+              {brands.map((brand) => (
+                <SelectItem key={brand.id} value={brand.id}>
+                  {brand.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+      )}
 
-        <Button variant="ghost" className="mt-4 gap-2">
-          <Upload className="w-4 h-4" />
-          Subir video
-        </Button>
+      {/* Main Workflow */}
+      <div className="space-y-6">
+        {/* Step 1: Paste Video Link */}
+        <VideoLinkInput
+          brandId={selectedBrand}
+          onAnalysisStart={handleAnalysisStart}
+        />
+
+        {/* Step 2: Show Analysis Results */}
+        {currentAnalysisId && !scriptVariants && (
+          <AnalysisResult
+            analysisId={currentAnalysisId}
+            onGenerateScripts={handleGenerateScripts}
+          />
+        )}
+
+        {/* Step 3: Script Variants */}
+        {generatingScripts && (
+          <Card className="p-8">
+            <div className="text-center">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent" />
+              <p className="mt-4 text-muted-foreground">
+                Generando guiones con IA...
+              </p>
+            </div>
+          </Card>
+        )}
+
+        {scriptVariants && (
+          <ScriptVariants
+            variants={scriptVariants}
+            onApprove={handleApproveScript}
+          />
+        )}
       </div>
 
       {/* Templates Section */}
       <div>
         <div className="flex items-center justify-between mb-6">
-          <h2>Plantillas</h2>
-          <Button variant="link" className="text-sm">
-            Ver todas
-          </Button>
+          <div>
+            <h2 className="text-2xl font-bold">Plantillas</h2>
+            <p className="text-muted-foreground mt-1">
+              Inspírate con nuestras plantillas ganadoras
+            </p>
+          </div>
         </div>
-        <p className="text-muted-foreground mb-6">
-          Inspírate con nuestras plantillas ganadoras
-        </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {templates.map((template, index) => (
