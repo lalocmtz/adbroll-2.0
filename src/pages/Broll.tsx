@@ -28,13 +28,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Upload, ChevronRight, AlertCircle } from "lucide-react";
+import { Upload, ChevronRight, AlertCircle, FolderPlus } from "lucide-react";
 import { toast } from "sonner";
 import { FolderCard } from "@/components/broll/FolderCard";
 import { VideoCard } from "@/components/broll/VideoCard";
 import { VideoUploadDialog } from "@/components/broll/VideoUploadDialog";
 import { VideoDetailsDialog } from "@/components/broll/VideoDetailsDialog";
 import { MoveVideoDialog } from "@/components/broll/MoveVideoDialog";
+import { CreateFolderDialog } from "@/components/broll/CreateFolderDialog";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Brand {
   id: string;
@@ -64,10 +66,13 @@ export default function Broll() {
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<Folder | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<BrollFile | null>(null);
   const [videoToMove, setVideoToMove] = useState<BrollFile | null>(null);
   const [videoToDelete, setVideoToDelete] = useState<BrollFile | null>(null);
+  const [folderToDelete, setFolderToDelete] = useState<Folder | null>(null);
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const { data: brands, isLoading: brandsLoading } = useQuery({
     queryKey: ["brands"],
@@ -84,16 +89,42 @@ export default function Broll() {
   const { data: folders = [] } = useQuery({
     queryKey: ["broll-folders", selectedBrand],
     queryFn: async () => {
-      if (!selectedBrand) return [];
+      if (!selectedBrand || !user) return [];
+      
       const { data, error } = await supabase
         .from("broll_folders")
         .select("*")
         .eq("brand_id", selectedBrand)
         .order("is_default", { ascending: false });
+      
       if (error) throw error;
+      
+      // If brand has no folders, create default ones
+      if (data.length === 0) {
+        const defaultFolders = [
+          { user_id: user.id, brand_id: selectedBrand, name: 'Hook', is_default: true },
+          { user_id: user.id, brand_id: selectedBrand, name: 'CTA', is_default: true },
+          { user_id: user.id, brand_id: selectedBrand, name: 'Usando el producto', is_default: true },
+          { user_id: user.id, brand_id: selectedBrand, name: 'Social proof', is_default: true },
+          { user_id: user.id, brand_id: selectedBrand, name: 'Uso diario', is_default: true },
+        ];
+        
+        const { data: newFolders, error: insertError } = await supabase
+          .from("broll_folders")
+          .insert(defaultFolders)
+          .select();
+        
+        if (insertError) {
+          console.error("Error creating default folders:", insertError);
+          return [];
+        }
+        
+        return newFolders as Folder[];
+      }
+      
       return data as Folder[];
     },
-    enabled: !!selectedBrand,
+    enabled: !!selectedBrand && !!user,
   });
 
   const { data: files = [] } = useQuery({
@@ -165,6 +196,39 @@ export default function Broll() {
     }
   };
 
+  const handleDeleteFolder = async () => {
+    if (!folderToDelete) return;
+
+    // Check if folder has videos
+    const folderVideos = getFolderVideos(folderToDelete.id);
+    if (folderVideos.length > 0) {
+      toast.error("No puedes eliminar una carpeta con videos");
+      setFolderToDelete(null);
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("broll_folders")
+        .delete()
+        .eq("id", folderToDelete.id);
+
+      if (error) throw error;
+
+      toast.success("Carpeta eliminada");
+      queryClient.invalidateQueries({ queryKey: ["broll-folders"] });
+      setFolderToDelete(null);
+      
+      // If we were viewing this folder, go back to main view
+      if (selectedFolder?.id === folderToDelete.id) {
+        setSelectedFolder(null);
+      }
+    } catch (error: any) {
+      console.error("Error deleting folder:", error);
+      toast.error("Error al eliminar carpeta");
+    }
+  };
+
   const getFolderVideos = (folderId: string) => {
     return files.filter((f) => f.folder_id === folderId);
   };
@@ -208,10 +272,18 @@ export default function Broll() {
             Organiza tus videos por marca y carpetas temáticas
           </p>
         </div>
-        <Button onClick={() => setUploadDialogOpen(true)}>
-          <Upload className="w-4 h-4 mr-2" />
-          Subir Video
-        </Button>
+        <div className="flex gap-2">
+          {selectedBrand && (
+            <Button variant="outline" onClick={() => setCreateFolderOpen(true)}>
+              <FolderPlus className="w-4 h-4 mr-2" />
+              Nueva Carpeta
+            </Button>
+          )}
+          <Button onClick={() => setUploadDialogOpen(true)}>
+            <Upload className="w-4 h-4 mr-2" />
+            Subir Video
+          </Button>
+        </div>
       </div>
 
       {/* Brand Selector */}
@@ -298,7 +370,9 @@ export default function Broll() {
               key={folder.id}
               name={folder.name}
               videoCount={getFolderVideos(folder.id).length}
+              isDefault={folder.is_default}
               onClick={() => setSelectedFolder(folder)}
+              onDelete={() => setFolderToDelete(folder)}
             />
           ))}
         </div>
@@ -341,6 +415,13 @@ export default function Broll() {
         defaultFolderId={selectedFolder?.id}
       />
 
+      <CreateFolderDialog
+        open={createFolderOpen}
+        onOpenChange={setCreateFolderOpen}
+        brandId={selectedBrand || ""}
+        userId={user?.id || ""}
+      />
+
       <VideoDetailsDialog
         video={selectedVideo}
         open={!!selectedVideo}
@@ -367,6 +448,28 @@ export default function Broll() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteVideo} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!folderToDelete} onOpenChange={(open) => !open && setFolderToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar carpeta?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. La carpeta "{folderToDelete?.name}" será eliminada permanentemente.
+              {getFolderVideos(folderToDelete?.id || "").length > 0 && (
+                <span className="block mt-2 text-amber-600 font-medium">
+                  Advertencia: Esta carpeta contiene videos. Mueve o elimina los videos antes de eliminar la carpeta.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteFolder} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Eliminar
             </AlertDialogAction>
           </AlertDialogFooter>
