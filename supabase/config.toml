@@ -5,3 +5,12 @@ verify_jwt = true
 
 [functions.generate-script]
 verify_jwt = true
+
+[functions.generate-voiceover]
+verify_jwt = true
+
+[functions.assign-clips]
+verify_jwt = true
+
+[functions.render-variant]
+verify_jwt = true

@@ -11,6 +11,7 @@ import Templates from "./pages/Templates";
 import Broll from "./pages/Broll";
 import Brands from "./pages/Brands";
 import NotFound from "./pages/NotFound";
+import Studio from "./pages/Studio";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -60,6 +61,16 @@ const App = () => (
               <ProtectedRoute>
                 <Layout>
                   <Brands />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/studio/:projectId"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Studio />
                 </Layout>
               </ProtectedRoute>
             }
