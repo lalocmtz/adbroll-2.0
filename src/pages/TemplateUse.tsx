@@ -219,7 +219,7 @@ const TemplateUse = () => {
     }
 
     // Navigate to Studio with assignments
-    navigate("/studio", {
+    navigate("/studio/template", {
       state: {
         templateId: template?.id,
         brandId: selectedBrandId,

@@ -14,3 +14,6 @@ verify_jwt = true
 
 [functions.render-variant]
 verify_jwt = true
+
+[functions.generate-script-sections]
+verify_jwt = true
