@@ -426,6 +426,14 @@ export default function StudioTemplate() {
         });
 
         // Call render function
+        console.log(`🎬 [FRONTEND] Invoking render-variant for variant ${variant.id}`);
+        console.log(`📦 [FRONTEND] Payload:`, {
+          variantId: variant.id,
+          clipAssignmentsCount: clipAssignments.length,
+          hasVoiceoverUrl: !!voiceoverUrl,
+          scriptSectionsCount: scripts.length,
+        });
+
         const { data: renderData, error: renderError } =
           await supabase.functions.invoke("render-variant", {
             body: {
@@ -440,11 +448,24 @@ export default function StudioTemplate() {
             },
           });
 
+        console.log(`📡 [FRONTEND] Render-variant response:`, { renderData, renderError });
+
         if (renderError) {
-          console.error("Error rendering variant:", renderError);
+          console.error("❌ [FRONTEND] Error rendering variant:", renderError);
+          
+          // Update variant status to failed in DB
+          await supabase
+            .from("variants")
+            .update({
+              status: "failed",
+              error_message: renderError.message || "Error al invocar función de renderizado",
+            })
+            .eq("id", variant.id);
+          
           throw renderError;
         }
 
+        console.log(`✅ [FRONTEND] Variant ${variant.id} render invoked successfully`);
         createdVariants.push({ ...variant, renderData });
       }
 
