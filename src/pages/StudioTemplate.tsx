@@ -141,6 +141,31 @@ export default function StudioTemplate() {
 
       setScripts(data.scripts || []);
 
+      // Create project if it doesn't exist
+      if (!projectId) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) throw new Error("No authenticated");
+
+        const { data: newProject, error: projectError } = await supabase
+          .from("projects")
+          .insert({
+            user_id: user.id,
+            brand_id: brandId,
+            template_id: templateId,
+            name: `${template?.name || "Proyecto"} - ${brand?.name || "Sin marca"}`,
+            status: "draft",
+          })
+          .select()
+          .single();
+
+        if (projectError) throw projectError;
+
+        console.log("Project created:", newProject.id);
+        setProjectId(newProject.id);
+      }
+
       toast({
         title: "Guiones generados",
         description: "Los textos han sido generados con IA",
