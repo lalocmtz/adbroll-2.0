@@ -179,11 +179,20 @@ export function VideoUploadZone({ brandId, onAnalysisStart }: VideoUploadZonePro
             <Link2 className="w-8 h-8 text-white" />
           </div>
           
-          <h2 className="text-2xl font-bold mb-2">Pega tu link o sube tu video</h2>
+          <h2 className="text-2xl font-bold mb-2">Sube tu video para análisis</h2>
           <p className="text-muted-foreground mb-6">
-            Analiza videos virales de TikTok, Instagram, YouTube, Facebook o sube tu archivo .mp4
+            Analiza videos de TikTok, Instagram, YouTube, Facebook subiendo el archivo .mp4
           </p>
 
+          <div className="bg-muted/50 p-4 rounded-lg mb-6">
+            <p className="text-sm text-muted-foreground">
+              💡 <strong>Tip:</strong> Descarga el video desde la red social primero, luego súbelo aquí para obtener el análisis narrativo completo con transcripción.
+            </p>
+          </div>
+        </div>
+
+        {/* URL input and divider temporarily disabled - social media URLs require download */}
+        <div className="hidden">
           <div className="flex gap-3 mb-4">
             <Input
               type="url"
@@ -204,15 +213,14 @@ export function VideoUploadZone({ brandId, onAnalysisStart }: VideoUploadZonePro
               )}
             </Button>
           </div>
-        </div>
 
-        {/* Divider */}
-        <div className="relative my-8">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-border"></div>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-4 bg-background text-muted-foreground">o</span>
+          <div className="relative my-8">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-background text-muted-foreground">o</span>
+            </div>
           </div>
         </div>
 

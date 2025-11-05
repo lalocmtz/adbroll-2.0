@@ -75,6 +75,8 @@ serve(async (req) => {
 
     // Determine video source
     let audioUrl: string;
+    let videoBlob: Blob;
+    
     if (video_file_path) {
       // Generate signed URL for uploaded file
       const { data: signedData, error: signError } = await supabaseClient.storage
@@ -85,24 +87,31 @@ serve(async (req) => {
         throw new Error('Error al generar URL firmada del video');
       }
       audioUrl = signedData.signedUrl;
+      
+      console.log(`🔗 [TRANSCRIBE] Using uploaded file: ${video_file_path}`);
     } else if (video_url) {
-      audioUrl = video_url;
+      // For social media URLs, we need to download and store first
+      console.log(`🔗 [TRANSCRIBE] Downloading from URL: ${video_url.substring(0, 50)}...`);
+      
+      // Note: TikTok/Instagram URLs don't allow direct downloads
+      // We need to use a downloader service or require file upload
+      throw new Error('Las URLs de redes sociales requieren descargar el video primero. Por favor, descarga el video y súbelo directamente.');
     } else {
       throw new Error('Se requiere video_url o video_file_path');
     }
 
-    console.log(`🔗 [TRANSCRIBE] Audio URL: ${audioUrl.substring(0, 50)}...`);
+    console.log(`🔗 [TRANSCRIBE] Fetching video from storage...`);
 
-    // Call OpenAI Whisper API
-    const formData = new FormData();
-    
     // Fetch video file
     const videoResponse = await fetch(audioUrl);
     if (!videoResponse.ok) {
       throw new Error(`Error al descargar video: ${videoResponse.status}`);
     }
     
-    const videoBlob = await videoResponse.blob();
+    videoBlob = await videoResponse.blob();
+    console.log(`📦 [TRANSCRIBE] Video blob size: ${videoBlob.size} bytes`);
+    // Call OpenAI Whisper API
+    const formData = new FormData();
     formData.append('file', videoBlob, 'video.mp4');
     formData.append('model', 'whisper-1');
     formData.append('response_format', 'verbose_json'); // Include timestamps
