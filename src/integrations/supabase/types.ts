@@ -14,6 +14,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      brand_adaptation_preferences: {
+        Row: {
+          brand_id: string
+          created_at: string | null
+          custom_instructions: string | null
+          emoji_style: string | null
+          formality: string | null
+          id: string
+          language: string | null
+          tone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          brand_id: string
+          created_at?: string | null
+          custom_instructions?: string | null
+          emoji_style?: string | null
+          formality?: string | null
+          id?: string
+          language?: string | null
+          tone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          brand_id?: string
+          created_at?: string | null
+          custom_instructions?: string | null
+          emoji_style?: string | null
+          formality?: string | null
+          id?: string
+          language?: string | null
+          tone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_adaptation_preferences_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: true
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brands: {
         Row: {
           color_palette: Json | null
@@ -466,40 +510,55 @@ export type Database = {
       }
       video_analyses: {
         Row: {
+          analysis_quality_score: number | null
           brand_id: string | null
           created_at: string | null
           error_message: string | null
+          feedback_timestamp: string | null
           id: string
           metadata: Json | null
           source_url: string
           status: string | null
           structure: Json
+          thumbnail_url: string | null
           transcription: string | null
+          user_feedback: string | null
           user_id: string
+          video_file_path: string | null
         }
         Insert: {
+          analysis_quality_score?: number | null
           brand_id?: string | null
           created_at?: string | null
           error_message?: string | null
+          feedback_timestamp?: string | null
           id?: string
           metadata?: Json | null
           source_url: string
           status?: string | null
           structure?: Json
+          thumbnail_url?: string | null
           transcription?: string | null
+          user_feedback?: string | null
           user_id: string
+          video_file_path?: string | null
         }
         Update: {
+          analysis_quality_score?: number | null
           brand_id?: string | null
           created_at?: string | null
           error_message?: string | null
+          feedback_timestamp?: string | null
           id?: string
           metadata?: Json | null
           source_url?: string
           status?: string | null
           structure?: Json
+          thumbnail_url?: string | null
           transcription?: string | null
+          user_feedback?: string | null
           user_id?: string
+          video_file_path?: string | null
         }
         Relationships: [
           {

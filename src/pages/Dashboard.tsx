@@ -10,9 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { VideoLinkInput } from "@/components/dashboard/VideoLinkInput";
-import { AnalysisResult } from "@/components/dashboard/AnalysisResult";
-import { ScriptVariants } from "@/components/dashboard/ScriptVariants";
+import { VideoUploadZone } from "@/components/dashboard/VideoUploadZone";
+import { VideoAnalysisResult } from "@/components/dashboard/VideoAnalysisResult";
 import { toast } from "sonner";
 
 interface Brand {
@@ -23,8 +22,6 @@ interface Brand {
 const Dashboard = () => {
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null);
-  const [scriptVariants, setScriptVariants] = useState<any[] | null>(null);
-  const [generatingScripts, setGeneratingScripts] = useState(false);
 
   // Fetch brands
   const { data: brands } = useQuery({
@@ -47,35 +44,24 @@ const Dashboard = () => {
 
   const handleAnalysisStart = (analysisId: string) => {
     setCurrentAnalysisId(analysisId);
-    setScriptVariants(null);
   };
 
-  const handleGenerateScripts = async (analysisId: string) => {
-    setGeneratingScripts(true);
-    
+  const handleAdaptToBrand = async () => {
+    if (!currentAnalysisId || !selectedBrand) return;
+
     try {
-      const { data, error } = await supabase.functions.invoke("generate-script", {
+      const { error } = await supabase.functions.invoke("adapt-to-brand", {
         body: {
-          analysis_id: analysisId,
-          variant_count: 3,
+          analysis_id: currentAnalysisId,
+          brand_id: selectedBrand,
         },
       });
 
       if (error) throw error;
-
-      setScriptVariants(data.variants);
-      toast.success("¡Guiones generados exitosamente!");
+      toast.success("¡Contenido adaptado a tu marca!");
     } catch (error: any) {
-      console.error("Error generating scripts:", error);
-      toast.error(error.message || "Error al generar guiones");
-    } finally {
-      setGeneratingScripts(false);
+      toast.error(error.message || "Error al adaptar");
     }
-  };
-
-  const handleApproveScript = async (variantIndex: number, editedVariant: any) => {
-    toast.success("Guion aprobado. El renderizado se implementará en la siguiente fase.");
-    console.log("Approved variant:", editedVariant);
   };
 
   const templates = [
@@ -116,36 +102,17 @@ const Dashboard = () => {
 
       {/* Main Workflow */}
       <div className="space-y-6">
-        {/* Step 1: Paste Video Link */}
-        <VideoLinkInput
+        {/* Step 1: Upload or Paste Video */}
+        <VideoUploadZone
           brandId={selectedBrand}
           onAnalysisStart={handleAnalysisStart}
         />
 
         {/* Step 2: Show Analysis Results */}
-        {currentAnalysisId && !scriptVariants && (
-          <AnalysisResult
+        {currentAnalysisId && (
+          <VideoAnalysisResult
             analysisId={currentAnalysisId}
-            onGenerateScripts={handleGenerateScripts}
-          />
-        )}
-
-        {/* Step 3: Script Variants */}
-        {generatingScripts && (
-          <Card className="p-8">
-            <div className="text-center">
-              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent" />
-              <p className="mt-4 text-muted-foreground">
-                Generando guiones con IA...
-              </p>
-            </div>
-          </Card>
-        )}
-
-        {scriptVariants && (
-          <ScriptVariants
-            variants={scriptVariants}
-            onApprove={handleApproveScript}
+            onAdaptToBrand={handleAdaptToBrand}
           />
         )}
       </div>
