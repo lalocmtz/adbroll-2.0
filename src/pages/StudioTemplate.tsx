@@ -10,6 +10,10 @@ import { VoiceSelection } from "@/components/studio/VoiceSelection";
 import { ScriptSection } from "@/components/studio/ScriptSection";
 import { VideoPreview } from "@/components/studio/VideoPreview";
 import { RenderProgress } from "@/components/studio/RenderProgress";
+import { VariantCountSelector } from "@/components/studio/VariantCountSelector";
+import { VariationTypeSelector } from "@/components/studio/VariationTypeSelector";
+import { HookSelector } from "@/components/studio/HookSelector";
+import { HookPreview } from "@/components/studio/HookPreview";
 
 interface SectionScript {
   sectionId: string;
@@ -20,6 +24,12 @@ interface Assignment {
   sectionId: string;
   clipId: string;
   folderId: string;
+}
+
+interface HookConfig {
+  variantIndex: number;
+  clipId: string;
+  headlineStyle: "text-over-black" | "text-over-video" | "none";
 }
 
 export default function StudioTemplate() {
@@ -53,8 +63,9 @@ export default function StudioTemplate() {
   const [generatedVariants, setGeneratedVariants] = useState<any[]>([]);
   const [variantSignedUrls, setVariantSignedUrls] = useState<Map<string, string>>(new Map());
   const [variantsProgress, setVariantsProgress] = useState<any[]>([]);
-  const [numVariants, setNumVariants] = useState(3);
-  const [varyHookVisual, setVaryHookVisual] = useState(false);
+  const [numVariants, setNumVariants] = useState(1);
+  const [variationType, setVariationType] = useState<"hook" | "full">("hook");
+  const [hookConfigs, setHookConfigs] = useState<HookConfig[]>([]);
 
   useEffect(() => {
     if (!templateId || !brandId || !assignments) {
@@ -486,6 +497,35 @@ export default function StudioTemplate() {
         </div>
       </div>
 
+      {/* Variant Configuration */}
+      <Card className="p-6">
+        <VariantCountSelector count={numVariants} onChange={setNumVariants} />
+      </Card>
+
+      {numVariants > 1 && (
+        <Card className="p-6">
+          <VariationTypeSelector type={variationType} onChange={setVariationType} />
+        </Card>
+      )}
+
+      {numVariants > 1 && (
+        <Card className="p-6">
+          <HookSelector
+            brandId={brandId}
+            numVariants={numVariants}
+            hooks={hookConfigs}
+            onChange={setHookConfigs}
+          />
+        </Card>
+      )}
+
+      {numVariants > 1 && hookConfigs.length > 0 && hookConfigs[0].clipId && (
+        <HookPreview
+          clipId={hookConfigs[0].clipId}
+          headlineStyle={hookConfigs[0].headlineStyle}
+        />
+      )}
+
       {/* Video Preview */}
       <VideoPreview
         sections={sections}
@@ -575,45 +615,6 @@ export default function StudioTemplate() {
             Una vez que hayas generado la voz y revisado los guiones, puedes
             renderizar el video final con subtítulos sincronizados.
           </p>
-
-          {/* Variant Options */}
-          <div className="space-y-4">
-            <div>
-              <Label className="text-sm font-medium mb-2 block">
-                Número de variantes
-              </Label>
-              <div className="flex gap-4">
-                {[3, 5].map((num) => (
-                  <Button
-                    key={num}
-                    variant={numVariants === num ? "default" : "outline"}
-                    onClick={() => setNumVariants(num)}
-                    className="flex-1"
-                    disabled={isRendering}
-                  >
-                    {num} variantes
-                  </Button>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Las variantes tendrán guiones diferentes generados por IA
-              </p>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="varyHook"
-                checked={varyHookVisual}
-                onChange={(e) => setVaryHookVisual(e.target.checked)}
-                className="rounded border-gray-300"
-                disabled={isRendering}
-              />
-              <Label htmlFor="varyHook" className="text-sm font-normal cursor-pointer">
-                Variar también el hook visual (video de entrada)
-              </Label>
-            </div>
-          </div>
 
           <Button
             onClick={handleRenderVideo}
