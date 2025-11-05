@@ -9,8 +9,10 @@ const corsHeaders = {
 };
 
 interface AnalyzeRequest {
-  video_url: string;
+  video_url?: string;
   brand_id: string;
+  analysis_id?: string;
+  video_file_path?: string;
 }
 
 serve(async (req) => {
@@ -19,13 +21,13 @@ serve(async (req) => {
   }
 
   try {
-    const { video_url, brand_id }: AnalyzeRequest = await req.json();
+    const { video_url, brand_id, analysis_id, video_file_path }: AnalyzeRequest = await req.json();
 
-    if (!video_url || !brand_id) {
-      throw new Error("video_url and brand_id are required");
+    if (!brand_id) {
+      throw new Error("brand_id is required");
     }
 
-    console.log("Analyzing video:", video_url, "for brand:", brand_id);
+    console.log("[ANALYZE] Starting analysis for brand:", brand_id);
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -52,31 +54,58 @@ serve(async (req) => {
 
     if (brandError || !brand) throw new Error("Brand not found");
 
-    // Create initial analysis record
-    const { data: analysis, error: analysisError } = await supabase
-      .from("video_analyses")
-      .insert({
-        user_id: user.id,
-        brand_id: brand_id,
-        source_url: video_url,
-        status: "processing",
-      })
-      .select()
-      .single();
+    // Get or create analysis record
+    let analysis;
+    if (analysis_id) {
+      // Use existing analysis record with transcription
+      const { data: existingAnalysis, error: fetchError } = await supabase
+        .from("video_analyses")
+        .select("*")
+        .eq("id", analysis_id)
+        .single();
 
-    if (analysisError) throw analysisError;
+      if (fetchError || !existingAnalysis) {
+        throw new Error("Analysis record not found");
+      }
 
-    // For MVP: Mock transcription (in production, use Whisper API or download video)
-    const mockTranscription = `
-      Hey! Have you been struggling with dry skin? 
-      I know the feeling - you try everything and nothing works.
-      But then I found this amazing natural cream.
-      In just 7 days, my skin was completely transformed.
-      My friends keep asking me what I'm using!
-      Don't wait - try it now and see the difference.
-    `;
+      analysis = existingAnalysis;
+      console.log("[ANALYZE] Using existing analysis:", analysis.id);
+    } else {
+      // Create new analysis record (backward compatibility)
+      const { data: newAnalysis, error: analysisError } = await supabase
+        .from("video_analyses")
+        .insert({
+          user_id: user.id,
+          brand_id: brand_id,
+          source_url: video_url || "",
+          video_file_path: video_file_path,
+          status: "processing",
+        })
+        .select()
+        .single();
 
-    console.log("Analyzing with GPT-4...");
+      if (analysisError) throw analysisError;
+      analysis = newAnalysis;
+      console.log("[ANALYZE] Created new analysis:", analysis.id);
+    }
+
+    // Get transcription
+    const transcription = analysis.transcription;
+    
+    if (!transcription) {
+      // Update status to failed
+      await supabase
+        .from("video_analyses")
+        .update({
+          status: "failed",
+          error_message: "No transcription available. Please transcribe the video first.",
+        })
+        .eq("id", analysis.id);
+      
+      throw new Error("No transcription found. Please ensure the video was transcribed first.");
+    }
+
+    console.log("[ANALYZE] Analyzing with AI, transcription length:", transcription.length);
 
     // Analyze with GPT-4
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
@@ -94,7 +123,7 @@ CONTEXTO DE LA MARCA:
 - Tono: ${brand.tone_of_voice || "professional"}
 
 TRANSCRIPCIÓN DEL VIDEO:
-${mockTranscription}
+${transcription}
 
 TAREA:
 Analiza este video y extrae su estructura en formato JSON.
@@ -196,7 +225,6 @@ Responde SOLO con JSON válido (sin markdown, sin explicaciones), en este format
     const { error: updateError } = await supabase
       .from("video_analyses")
       .update({
-        transcription: mockTranscription,
         structure: structure,
         status: "completed",
         metadata: {
@@ -214,7 +242,7 @@ Responde SOLO con JSON válido (sin markdown, sin explicaciones), en este format
       JSON.stringify({
         analysis_id: analysis.id,
         structure,
-        transcription: mockTranscription,
+        transcription: transcription,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

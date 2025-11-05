@@ -50,18 +50,36 @@ export function VideoLinkInput({ brandId, onAnalysisStart }: VideoLinkInputProps
         return;
       }
 
-      // Call edge function to analyze video
-      const { data, error } = await supabase.functions.invoke("analyze-video", {
-        body: {
-          video_url: videoUrl,
-          brand_id: brandId,
-        },
-      });
+      // Step 1: Extract audio and transcribe
+      toast.info("Extrayendo audio del video...");
+      const { data: extractData, error: extractError } = await supabase.functions.invoke(
+        "extract-audio-from-link",
+        {
+          body: {
+            video_url: videoUrl,
+            brand_id: brandId,
+          },
+        }
+      );
 
-      if (error) throw error;
+      if (extractError) throw extractError;
+
+      // Step 2: Analyze narrative structure
+      toast.info("Analizando estructura narrativa...");
+      const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke(
+        "analyze-video",
+        {
+          body: {
+            analysis_id: extractData.analysis_id,
+            brand_id: brandId,
+          },
+        }
+      );
+
+      if (analyzeError) throw analyzeError;
 
       toast.success("¡Video analizado exitosamente!");
-      onAnalysisStart(data.analysis_id);
+      onAnalysisStart(extractData.analysis_id);
       setVideoUrl("");
     } catch (error: any) {
       console.error("Error analyzing video:", error);
@@ -80,7 +98,19 @@ export function VideoLinkInput({ brandId, onAnalysisStart }: VideoLinkInputProps
         
         <h2 className="text-2xl font-bold mb-2">Pega tu link</h2>
         <p className="text-muted-foreground mb-6">
-          Pega el enlace de un video viral de TikTok, Instagram, YouTube o Facebook
+          Pega el enlace de un video viral de YouTube, TikTok o Instagram
+        </p>
+        <p className="text-xs text-muted-foreground mb-4">
+          ⚠️ Nota: Para TikTok e Instagram, necesitarás descargar el video primero usando{" "}
+          <a 
+            href="https://snaptik.app" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-primary underline hover:text-primary/80"
+          >
+            SnapTik
+          </a>
+          {" "}y luego subirlo en la sección "Subir Video"
         </p>
 
         <div className="flex gap-3 mb-4">
