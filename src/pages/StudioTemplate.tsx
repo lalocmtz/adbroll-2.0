@@ -402,8 +402,7 @@ export default function StudioTemplate() {
 
         // Generate signed URL when video is ready
         if (variant?.status === "completed" && variant.video_url) {
-          console.log(`🔗 [POLLING] Generating signed URL for video path: ${variant.video_url}`);
-          console.log(`🔗 [POLLING] Full variant data:`, variant);
+          console.log(`🔗 [POLLING] Generating signed URL for video: ${variant.video_url}`);
           
           const { data: signedData, error: signError } = await supabase.storage
             .from("renders")
@@ -411,32 +410,14 @@ export default function StudioTemplate() {
 
           if (signError) {
             console.error("❌ [POLLING] Error creating signed URL:", signError);
-            console.error("❌ [POLLING] Error details:", JSON.stringify(signError));
-            console.error("❌ [POLLING] Attempted path:", variant.video_url);
-            
-            toast({
-              variant: "destructive",
-              title: "Error al generar URL",
-              description: `No se pudo crear la URL del video: ${signError.message}`,
-            });
           } else if (signedData?.signedUrl) {
             console.log(`✅ [POLLING] Signed URL created successfully for variant ${variantId}`);
-            console.log(`✅ [POLLING] URL:`, signedData.signedUrl);
             setVariantSignedUrls(prev => {
               const newMap = new Map(prev);
               newMap.set(variantId, signedData.signedUrl);
-              console.log(`✅ [POLLING] Updated variantSignedUrls Map, size: ${newMap.size}`);
               return newMap;
             });
-          } else {
-            console.error("⚠️ [POLLING] No signed URL in response:", signedData);
           }
-        } else {
-          console.log(`⚠️ [POLLING] Variant not ready for URL generation:`, {
-            status: variant?.status,
-            hasVideoUrl: !!variant?.video_url,
-            videoUrl: variant?.video_url
-          });
         }
 
         // Stop polling when completed or failed
@@ -914,21 +895,14 @@ export default function StudioTemplate() {
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              console.log("🖱️ [UI] Ver button clicked for variant:", variant.id);
-                              console.log("🔍 [UI] variantSignedUrls Map:", Array.from(variantSignedUrls.entries()));
                               const url = variantSignedUrls.get(variant.id);
-                              console.log("🔍 [UI] URL found:", url);
-                              
                               if (url) {
                                 window.open(url, "_blank");
                               } else {
-                                console.error("❌ [UI] No URL found for variant:", variant.id);
-                                console.error("❌ [UI] Variant data:", variant);
-                                
                                 toast({
                                   variant: "destructive",
                                   title: "Error",
-                                  description: "URL del video no disponible. Intenta recargar la página.",
+                                  description: "URL del video no disponible",
                                 });
                               }
                             }}
@@ -939,23 +913,17 @@ export default function StudioTemplate() {
                             variant="default"
                             size="sm"
                             onClick={async () => {
-                              console.log("🖱️ [UI] Descargar button clicked for variant:", variant.id);
                               const url = variantSignedUrls.get(variant.id);
-                              console.log("🔍 [UI] URL found:", url);
-                              
                               if (url) {
                                 const link = document.createElement("a");
                                 link.href = url;
                                 link.download = `variante-${idx + 1}.mp4`;
                                 link.click();
                               } else {
-                                console.error("❌ [UI] No URL found for variant:", variant.id);
-                                console.error("❌ [UI] Variant data:", variant);
-                                
                                 toast({
                                   variant: "destructive",
                                   title: "Error",
-                                  description: "URL del video no disponible. Intenta recargar la página.",
+                                  description: "URL del video no disponible",
                                 });
                               }
                             }}

@@ -3,12 +3,6 @@ project_id = "ayvlvkwixkkjkysgeetj"
 [functions.analyze-video]
 verify_jwt = true
 
-[functions.transcribe-video]
-verify_jwt = true
-
-[functions.adapt-to-brand]
-verify_jwt = true
-
 [functions.generate-script]
 verify_jwt = true
 

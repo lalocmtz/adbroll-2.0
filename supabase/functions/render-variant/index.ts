@@ -320,25 +320,17 @@ serve(async (req) => {
     // Step 6: Upload to Supabase storage
     console.log("☁️ [RENDER-VARIANT] Step 7: Uploading to Supabase Storage...");
     await updateProgress("rendering", 85, "Subiendo a Supabase Storage...");
-    
-    // Use consistent path format (without leading slash)
     const videoPath = `${variantId}/video.mp4`;
     const srtPath = `${variantId}/subtitles.srt`;
 
     console.log(`☁️ [RENDER-VARIANT] Video path: ${videoPath}`);
-    console.log(`☁️ [RENDER-VARIANT] SRT path: ${srtPath}`);
-    console.log(`☁️ [RENDER-VARIANT] Video size to upload: ${(videoBlob.byteLength / 1024 / 1024).toFixed(2)} MB`);
     
-    const { data: uploadData, error: videoUploadError } = await supabase.storage
+    const { error: videoUploadError } = await supabase.storage
       .from("renders")
       .upload(videoPath, videoBlob, {
         contentType: "video/mp4",
         upsert: true,
       });
-
-    if (uploadData) {
-      console.log(`✅ [RENDER-VARIANT] Upload response:`, uploadData);
-    }
 
     if (videoUploadError) {
       console.error("❌ [RENDER-VARIANT] Error uploading video to storage:", videoUploadError);
