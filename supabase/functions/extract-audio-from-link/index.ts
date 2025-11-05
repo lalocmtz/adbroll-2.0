@@ -175,218 +175,59 @@ serve(async (req) => {
 });
 
 /**
- * Extract video data (audio URL + thumbnail) from different platforms
+ * Extract video data (audio URL + thumbnail) using Download All in One API
+ * Supports: TikTok, YouTube, Instagram, Facebook, Threads, Vimeo, Reddit, and more
  */
 async function extractVideoData(url: string): Promise<{ audioUrl: string; thumbnailUrl: string }> {
-  // TikTok
-  if (url.includes("tiktok.com")) {
-    return await extractTikTokData(url);
-  }
-
-  // Instagram
-  if (url.includes("instagram.com")) {
-    return await extractInstagramData(url);
-  }
-
-  // YouTube
-  if (url.includes("youtube.com") || url.includes("youtu.be")) {
-    return await extractYouTubeData(url);
-  }
-
-  // Facebook
-  if (url.includes("facebook.com") || url.includes("fb.watch")) {
-    return await extractFacebookData(url);
-  }
-
-  throw new Error(
-    "Plataforma no soportada. Actualmente soportamos: YouTube, TikTok, Instagram y Facebook."
-  );
-}
-
-/**
- * Extract TikTok video data using RapidAPI TikTok Downloader
- * Requires RAPIDAPI_KEY secret to be set
- */
-async function extractTikTokData(url: string): Promise<{ audioUrl: string; thumbnailUrl: string }> {
   const RAPIDAPI_KEY = Deno.env.get("RAPIDAPI_KEY");
   
   if (!RAPIDAPI_KEY) {
     throw new Error(
-      "Para extraer videos de TikTok automáticamente, necesitas configurar RAPIDAPI_KEY. " +
-      "Alternativa: descarga el video manualmente usando SnapTik (snaptik.app) y súbelo."
+      "Para extraer videos automáticamente, necesitas configurar RAPIDAPI_KEY. " +
+      "Ve a la configuración del proyecto para agregarlo."
     );
   }
 
   try {
-    console.log("[TIKTOK] Fetching video data from RapidAPI...");
+    console.log("[EXTRACT] Fetching video info from Download All in One API...");
     
     const response = await fetch(
-      `https://tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com/vid/index?url=${encodeURIComponent(url)}`,
+      `https://download-all-in-one.p.rapidapi.com/get-info?url=${encodeURIComponent(url)}`,
       {
         method: "GET",
         headers: {
-          "X-RapidAPI-Key": RAPIDAPI_KEY,
-          "X-RapidAPI-Host": "tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com",
+          "x-rapidapi-host": "download-all-in-one.p.rapidapi.com",
+          "x-rapidapi-key": RAPIDAPI_KEY,
         },
       }
     );
 
     if (!response.ok) {
-      throw new Error(`RapidAPI error: ${response.status}`);
+      const errorText = await response.text();
+      console.error("[EXTRACT] RapidAPI error:", response.status, errorText);
+      throw new Error(`Error al extraer el video: ${response.status}`);
     }
 
     const data = await response.json();
+    console.log("[EXTRACT] Video data extracted successfully");
     
-    return {
-      audioUrl: data.music || data.video[0],
-      thumbnailUrl: data.cover || data.origin_cover,
-    };
-  } catch (error) {
-    console.error("[TIKTOK] Error:", error);
-    throw new Error(
-      "No se pudo extraer el video de TikTok. Descarga el video manualmente usando SnapTik (snaptik.app) y súbelo."
-    );
-  }
-}
-
-/**
- * Extract Instagram video data using RapidAPI
- */
-async function extractInstagramData(url: string): Promise<{ audioUrl: string; thumbnailUrl: string }> {
-  const RAPIDAPI_KEY = Deno.env.get("RAPIDAPI_KEY");
-  
-  if (!RAPIDAPI_KEY) {
-    throw new Error(
-      "Para extraer videos de Instagram automáticamente, necesitas configurar RAPIDAPI_KEY. " +
-      "Alternativa: descarga el video manualmente y súbelo."
-    );
-  }
-
-  try {
-    console.log("[INSTAGRAM] Fetching video data from RapidAPI...");
+    // The API returns video_url or audio_url and thumbnail_url
+    const audioUrl = data.audio_url || data.video_url;
+    const thumbnailUrl = data.thumbnail_url || data.thumbnail || data.cover;
     
-    const response = await fetch(
-      `https://instagram-scraper-api2.p.rapidapi.com/v1/post_info?code_or_id_or_url=${encodeURIComponent(url)}`,
-      {
-        method: "GET",
-        headers: {
-          "X-RapidAPI-Key": RAPIDAPI_KEY,
-          "X-RapidAPI-Host": "instagram-scraper-api2.p.rapidapi.com",
-        },
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`RapidAPI error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const videoData = data.data?.video_url || data.data?.carousel_media?.[0]?.video_url;
-    
-    if (!videoData) {
-      throw new Error("No se encontró video en este post de Instagram");
+    if (!audioUrl) {
+      throw new Error("No se pudo obtener el audio/video del enlace proporcionado");
     }
 
     return {
-      audioUrl: videoData,
-      thumbnailUrl: data.data?.thumbnail_url || data.data?.display_url,
+      audioUrl,
+      thumbnailUrl: thumbnailUrl || "",
     };
-  } catch (error) {
-    console.error("[INSTAGRAM] Error:", error);
+  } catch (error: any) {
+    console.error("[EXTRACT] Error:", error);
     throw new Error(
-      "No se pudo extraer el video de Instagram. Descarga el video manualmente y súbelo."
+      error.message || "No se pudo extraer el video. Verifica que el enlace sea válido."
     );
   }
 }
 
-/**
- * Extract YouTube video data
- * Note: For audio extraction, you'd need a service that provides direct audio URLs
- */
-async function extractYouTubeData(url: string): Promise<{ audioUrl: string; thumbnailUrl: string }> {
-  const videoId = extractYouTubeId(url);
-  if (!videoId) {
-    throw new Error("URL de YouTube inválida");
-  }
-
-  try {
-    // Get thumbnail
-    const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
-
-    // For audio extraction from YouTube, you'd need:
-    // 1. A YouTube API key to get video info
-    // 2. A service that provides direct audio stream URLs (like invidious or similar)
-    // 3. Or use RapidAPI's YouTube downloader
-    
-    const RAPIDAPI_KEY = Deno.env.get("RAPIDAPI_KEY");
-    
-    if (!RAPIDAPI_KEY) {
-      throw new Error(
-        "Para extraer audio de YouTube, necesitas configurar RAPIDAPI_KEY. " +
-        "Alternativa: descarga el video manualmente usando yt-dlp o similar."
-      );
-    }
-
-    console.log("[YOUTUBE] Fetching video data from RapidAPI...");
-    
-    const response = await fetch(
-      `https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`,
-      {
-        method: "GET",
-        headers: {
-          "X-RapidAPI-Key": RAPIDAPI_KEY,
-          "X-RapidAPI-Host": "youtube-mp36.p.rapidapi.com",
-        },
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`RapidAPI error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    
-    if (data.status !== "ok" || !data.link) {
-      throw new Error("No se pudo obtener el audio del video de YouTube");
-    }
-
-    return {
-      audioUrl: data.link,
-      thumbnailUrl: thumbnailUrl,
-    };
-  } catch (error) {
-    console.error("[YOUTUBE] Error:", error);
-    throw new Error(
-      "No se pudo extraer el video de YouTube. Descarga el video manualmente."
-    );
-  }
-}
-
-/**
- * Extract Facebook video data
- */
-async function extractFacebookData(url: string): Promise<{ audioUrl: string; thumbnailUrl: string }> {
-  throw new Error(
-    "La extracción automática de Facebook aún no está implementada. " +
-    "Descarga el video manualmente y súbelo."
-  );
-}
-
-/**
- * Extract YouTube video ID from URL
- */
-function extractYouTubeId(url: string): string | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=)([^&]+)/,
-    /(?:youtu\.be\/)([^?]+)/,
-    /(?:youtube\.com\/embed\/)([^?]+)/,
-    /(?:youtube\.com\/shorts\/)([^?]+)/,
-  ];
-
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match) return match[1];
-  }
-
-  return null;
-}

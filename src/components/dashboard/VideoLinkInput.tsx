@@ -13,10 +13,15 @@ const urlSchema = z.string().url("Ingresa una URL válida").refine(
       url.includes("tiktok.com") ||
       url.includes("instagram.com") ||
       url.includes("youtube.com") ||
-      url.includes("facebook.com")
+      url.includes("youtu.be") ||
+      url.includes("facebook.com") ||
+      url.includes("fb.watch") ||
+      url.includes("threads.net") ||
+      url.includes("vimeo.com") ||
+      url.includes("reddit.com")
     );
   },
-  { message: "Solo se permiten enlaces de TikTok, Instagram, YouTube o Facebook" }
+  { message: "Solo se permiten enlaces de redes sociales populares (TikTok, Instagram, YouTube, Facebook, Threads, Vimeo, Reddit)" }
 );
 
 interface VideoLinkInputProps {
@@ -98,22 +103,28 @@ export function VideoLinkInput({ brandId, onAnalysisStart }: VideoLinkInputProps
         
         <h2 className="text-2xl font-bold mb-2">Pega tu link</h2>
         <p className="text-muted-foreground mb-4">
-          Pega el enlace de un video viral de YouTube, TikTok o Instagram
+          Pega el enlace de un video viral de cualquier red social
         </p>
         
-        <div className="bg-muted/50 border border-border rounded-lg p-4 mb-6 text-sm">
+        <div className="bg-gradient-to-br from-primary/10 to-accent/10 border border-primary/20 rounded-lg p-4 mb-6">
           <div className="flex items-start gap-3">
-            <div className="text-lg">ℹ️</div>
-            <div className="space-y-2">
+            <div className="text-2xl">✨</div>
+            <div className="space-y-2 flex-1">
               <p className="font-semibold text-foreground">
-                Extracción automática de videos
+                Extracción automática habilitada
               </p>
-              <p className="text-muted-foreground">
-                Para extraer automáticamente el audio de videos de redes sociales, necesitas configurar <strong>RapidAPI</strong>.
+              <p className="text-sm text-muted-foreground">
+                Soportamos TikTok, Instagram, YouTube, Facebook, Threads, Vimeo, Reddit y más
               </p>
-              <p className="text-xs text-muted-foreground">
-                Ver la guía completa en: <code className="bg-background px-1 py-0.5 rounded">docs/api-setup-guide.md</code>
-              </p>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <span className="text-xs bg-background/80 px-2 py-1 rounded">TikTok</span>
+                <span className="text-xs bg-background/80 px-2 py-1 rounded">Instagram</span>
+                <span className="text-xs bg-background/80 px-2 py-1 rounded">YouTube</span>
+                <span className="text-xs bg-background/80 px-2 py-1 rounded">Facebook</span>
+                <span className="text-xs bg-background/80 px-2 py-1 rounded">Threads</span>
+                <span className="text-xs bg-background/80 px-2 py-1 rounded">Vimeo</span>
+                <span className="text-xs bg-background/80 px-2 py-1 rounded">Reddit</span>
+              </div>
             </div>
           </div>
         </div>
@@ -121,7 +132,7 @@ export function VideoLinkInput({ brandId, onAnalysisStart }: VideoLinkInputProps
         <div className="flex gap-3 mb-4">
           <Input
             type="url"
-            placeholder="https://www.tiktok.com/@..."
+            placeholder="https://www.tiktok.com/@... o cualquier red social"
             value={videoUrl}
             onChange={(e) => setVideoUrl(e.target.value)}
             disabled={loading || !brandId}
