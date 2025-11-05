@@ -205,6 +205,14 @@ async function extractVideoData(url: string): Promise<{ audioUrl: string; thumbn
     if (!response.ok) {
       const errorText = await response.text();
       console.error("[EXTRACT] RapidAPI error:", response.status, errorText);
+      
+      if (response.status === 403) {
+        throw new Error(
+          "Debes suscribirte a la API 'Download All in One' en RapidAPI. " +
+          "Ve a https://rapidapi.com/uzapishop/api/download-all-in-one y haz clic en 'Subscribe to Test' para activar el plan gratuito."
+        );
+      }
+      
       throw new Error(`Error al extraer el video: ${response.status}`);
     }
 
