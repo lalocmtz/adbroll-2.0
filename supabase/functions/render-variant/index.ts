@@ -160,7 +160,6 @@ serve(async (req) => {
       },
       output: {
         format: "mp4",
-        resolution: "hd",
         aspectRatio: "9:16", // Vertical for TikTok/Reels
         size: {
           width: 1080,
