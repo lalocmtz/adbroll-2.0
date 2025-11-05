@@ -126,7 +126,6 @@ const Dashboard = () => {
         {currentAnalysisId && !scriptVariants && (
           <AnalysisResult
             analysisId={currentAnalysisId}
-            onGenerateScripts={handleGenerateScripts}
           />
         )}
 
