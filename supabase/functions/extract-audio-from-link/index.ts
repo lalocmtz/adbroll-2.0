@@ -219,14 +219,27 @@ async function extractVideoData(url: string): Promise<{ audioUrl: string; thumbn
     }
 
     const data = await response.json();
-    console.log("[EXTRACT] Video data extracted successfully");
+    console.log("[EXTRACT] API Response:", JSON.stringify(data, null, 2));
     
-    // The API returns video_url or audio_url and thumbnail_url
-    const audioUrl = data.audio_url || data.video_url;
-    const thumbnailUrl = data.thumbnail_url || data.thumbnail || data.cover;
+    // The API may return data in different structures, let's check all possibilities
+    const medias = data.medias || [];
+    const audioUrl = data.audio_url || 
+                     data.video_url || 
+                     data.url ||
+                     (medias[0]?.url) ||
+                     (medias[0]?.video_url);
+    
+    const thumbnailUrl = data.thumbnail_url || 
+                         data.thumbnail || 
+                         data.cover ||
+                         data.picture ||
+                         (medias[0]?.thumbnail);
+    
+    console.log("[EXTRACT] Extracted audioUrl:", audioUrl);
+    console.log("[EXTRACT] Extracted thumbnailUrl:", thumbnailUrl);
     
     if (!audioUrl) {
-      throw new Error("No se pudo obtener el audio/video del enlace proporcionado");
+      throw new Error("No se pudo obtener el audio/video del enlace proporcionado. Respuesta de API: " + JSON.stringify(data));
     }
 
     return {
