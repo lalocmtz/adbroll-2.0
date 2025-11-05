@@ -189,16 +189,18 @@ async function extractVideoData(url: string): Promise<{ audioUrl: string; thumbn
   }
 
   try {
-    console.log("[EXTRACT] Fetching video info from Download All in One API...");
+    console.log("[EXTRACT] Fetching video info from Social Download All In One API...");
     
     const response = await fetch(
-      `https://download-all-in-one.p.rapidapi.com/get-info?url=${encodeURIComponent(url)}`,
+      "https://social-download-all-in-one.p.rapidapi.com/v1/social/autolink",
       {
-        method: "GET",
+        method: "POST",
         headers: {
-          "x-rapidapi-host": "download-all-in-one.p.rapidapi.com",
+          "Content-Type": "application/json",
+          "x-rapidapi-host": "social-download-all-in-one.p.rapidapi.com",
           "x-rapidapi-key": RAPIDAPI_KEY,
         },
+        body: JSON.stringify({ url }),
       }
     );
 
@@ -208,8 +210,8 @@ async function extractVideoData(url: string): Promise<{ audioUrl: string; thumbn
       
       if (response.status === 403) {
         throw new Error(
-          "Debes suscribirte a la API 'Download All in One' en RapidAPI. " +
-          "Ve a https://rapidapi.com/uzapishop/api/download-all-in-one y haz clic en 'Subscribe to Test' para activar el plan gratuito."
+          "Debes suscribirte a la API 'Social Download All In One' en RapidAPI. " +
+          "Ve a https://rapidapi.com/hub y busca 'Social Download All In One' para activar tu suscripción."
         );
       }
       
