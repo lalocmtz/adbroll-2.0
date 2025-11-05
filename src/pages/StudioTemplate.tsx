@@ -380,20 +380,15 @@ export default function StudioTemplate() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
             {sections.map((section) => {
               const script = scripts.find((s) => s.sectionId === section.id);
-              const assignment = assignments.find(
-                (a: Assignment) => a.sectionId === section.id
-              );
-              const clip = assignment ? clips.get(assignment.clipId) : null;
 
               return (
                 <ScriptSection
                   key={section.id}
                   section={section}
                   script={script?.text || ""}
-                  clip={clip}
                   onUpdate={(newText) => updateScriptText(section.id, newText)}
                   onRegenerate={() => regenerateSection(section.id)}
                   isRegenerating={isRegeneratingSection === section.id}
