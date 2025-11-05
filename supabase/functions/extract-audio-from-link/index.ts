@@ -221,13 +221,25 @@ async function extractVideoData(url: string): Promise<{ audioUrl: string; thumbn
     const data = await response.json();
     console.log("[EXTRACT] API Response:", JSON.stringify(data, null, 2));
     
-    // The API may return data in different structures, let's check all possibilities
+    // The API returns a medias array with different quality options
     const medias = data.medias || [];
-    const audioUrl = data.audio_url || 
-                     data.video_url || 
-                     data.url ||
-                     (medias[0]?.url) ||
-                     (medias[0]?.video_url);
+    
+    // First, try to find an audio-only file (best for transcription)
+    let audioUrl = medias.find((m: any) => m.type === "audio")?.url;
+    
+    // If no audio-only, use the highest quality video (no watermark preferred)
+    if (!audioUrl) {
+      const videoMedia = medias.find((m: any) => 
+        m.type === "video" && (m.quality === "hd_no_watermark" || m.quality === "no_watermark")
+      ) || medias.find((m: any) => m.type === "video");
+      
+      audioUrl = videoMedia?.url;
+    }
+    
+    // Fallback to other possible fields
+    if (!audioUrl) {
+      audioUrl = data.audio_url || data.video_url || data.url;
+    }
     
     const thumbnailUrl = data.thumbnail_url || 
                          data.thumbnail || 
