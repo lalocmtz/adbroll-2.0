@@ -39,6 +39,12 @@ export default function StudioTemplate() {
   const [selectedVoice, setSelectedVoice] = useState("EXAVITQu4vr4xnSDxMaL");
   const [voiceoverUrl, setVoiceoverUrl] = useState<string | null>(null);
   const [isGeneratingVoice, setIsGeneratingVoice] = useState(false);
+  const [voiceSettings, setVoiceSettings] = useState({
+    stability: 0.5,
+    similarity_boost: 0.75,
+    style: 0,
+    use_speaker_boost: false,
+  });
 
   const [isRendering, setIsRendering] = useState(false);
   const [generatedVariants, setGeneratedVariants] = useState<any[]>([]);
@@ -212,13 +218,14 @@ export default function StudioTemplate() {
             script: fullScript,
             voiceId: selectedVoice,
             projectId: templateId,
+            settings: voiceSettings,
           },
         }
       );
 
       if (error) throw error;
 
-      setVoiceoverUrl(data.voiceoverUrl);
+      setVoiceoverUrl(data.audioUrl);
 
       toast({
         title: "Voiceover generado",
@@ -411,6 +418,8 @@ export default function StudioTemplate() {
         <VoiceSelection
           selectedVoice={selectedVoice}
           onVoiceSelect={setSelectedVoice}
+          voiceSettings={voiceSettings}
+          onVoiceSettingsChange={setVoiceSettings}
           onGenerate={handleGenerateVoiceover}
           isGenerating={isGeneratingVoice}
           voiceoverUrl={voiceoverUrl}

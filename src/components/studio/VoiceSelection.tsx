@@ -1,6 +1,11 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Volume2, Play } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { Volume2, Play, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface VoiceSelectionProps {
   selectedVoice: string;
@@ -8,16 +13,27 @@ interface VoiceSelectionProps {
   onGenerate: () => void;
   isGenerating: boolean;
   voiceoverUrl: string | null;
+  voiceSettings: VoiceSettings;
+  onVoiceSettingsChange: (settings: VoiceSettings) => void;
+}
+
+export interface VoiceSettings {
+  stability: number;
+  similarity_boost: number;
+  style: number;
+  use_speaker_boost: boolean;
 }
 
 const VOICES = [
-  { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", description: "Femenina, amigable" },
-  { id: "FGY2WhTYpPnrIDTdsKH5", name: "Laura", description: "Femenina, profesional" },
-  { id: "IKne3meq5aSn9XLyUdCD", name: "Charlie", description: "Masculina, cálida" },
-  { id: "JBFqnCBsd6RMkjVDRZzb", name: "George", description: "Masculina, autoritaria" },
-  { id: "9BWtsMINqrJLrRacOk9x", name: "Aria", description: "Femenina, versátil" },
-  { id: "CwhRBWXzGAHq8TQ4Fs17", name: "Roger", description: "Masculina, confiable" },
+  { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", description: "Femenina, amigable", language: "es" },
+  { id: "FGY2WhTYpPnrIDTdsKH5", name: "Laura", description: "Femenina, profesional", language: "es" },
+  { id: "IKne3meq5aSn9XLyUdCD", name: "Charlie", description: "Masculina, cálida", language: "es" },
+  { id: "JBFqnCBsd6RMkjVDRZzb", name: "George", description: "Masculina, autoritaria", language: "es" },
+  { id: "9BWtsMINqrJLrRacOk9x", name: "Aria", description: "Femenina, versátil", language: "es" },
+  { id: "CwhRBWXzGAHq8TQ4Fs17", name: "Roger", description: "Masculina, confiable", language: "es" },
 ];
+
+const PREVIEW_TEXT = "Hola, soy una voz de prueba para tu proyecto. ¿Te gusta cómo sueno?";
 
 export function VoiceSelection({
   selectedVoice,
@@ -25,50 +41,195 @@ export function VoiceSelection({
   onGenerate,
   isGenerating,
   voiceoverUrl,
+  voiceSettings,
+  onVoiceSettingsChange,
 }: VoiceSelectionProps) {
+  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const handlePreviewVoice = async (voiceId: string) => {
+    setPreviewingVoice(voiceId);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "preview-voice",
+        {
+          body: {
+            text: PREVIEW_TEXT,
+            voiceId,
+            settings: voiceSettings,
+          },
+        }
+      );
+
+      if (error) throw error;
+
+      // Play audio preview
+      const audio = new Audio(data.audioUrl);
+      audio.play();
+      
+      audio.onended = () => setPreviewingVoice(null);
+    } catch (error: any) {
+      console.error("Error previewing voice:", error);
+      toast({
+        variant: "destructive",
+        title: "Error al previsualizar voz",
+        description: error.message,
+      });
+      setPreviewingVoice(null);
+    }
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {VOICES.map((voice) => (
-          <Card
-            key={voice.id}
-            className={`p-4 cursor-pointer transition-all ${
-              selectedVoice === voice.id
-                ? "ring-2 ring-primary bg-primary/5"
-                : "hover:bg-secondary"
-            }`}
-            onClick={() => onVoiceSelect(voice.id)}
-          >
-            <div className="flex items-center gap-3">
-              <Volume2 className="w-5 h-5 text-primary" />
-              <div>
-                <p className="font-medium">{voice.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {voice.description}
-                </p>
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Volume2 className="w-5 h-5" />
+          Selecciona la voz
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {VOICES.map((voice) => (
+            <Card
+              key={voice.id}
+              className={`p-3 cursor-pointer transition-all ${
+                selectedVoice === voice.id
+                  ? "ring-2 ring-primary bg-primary/5"
+                  : "hover:bg-secondary"
+              }`}
+              onClick={() => onVoiceSelect(voice.id)}
+            >
+              <div className="space-y-2">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="font-medium text-sm">{voice.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {voice.description}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePreviewVoice(voice.id);
+                    }}
+                    disabled={previewingVoice === voice.id}
+                  >
+                    {previewingVoice === voice.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Play className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
-            </div>
-          </Card>
-        ))}
+            </Card>
+          ))}
+        </div>
       </div>
 
-      <div className="flex gap-4 items-center">
+      {/* Voice Settings */}
+      <Card className="p-4">
+        <h4 className="font-medium mb-4">Configuración de voz</h4>
+        <div className="space-y-4">
+          <div>
+            <div className="flex justify-between mb-2">
+              <Label className="text-sm">Estabilidad</Label>
+              <span className="text-xs text-muted-foreground">
+                {voiceSettings.stability.toFixed(2)}
+              </span>
+            </div>
+            <Slider
+              value={[voiceSettings.stability]}
+              onValueChange={([value]) =>
+                onVoiceSettingsChange({ ...voiceSettings, stability: value })
+              }
+              min={0}
+              max={1}
+              step={0.01}
+              className="w-full"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Menos variable ← → Más estable
+            </p>
+          </div>
+
+          <div>
+            <div className="flex justify-between mb-2">
+              <Label className="text-sm">Similitud</Label>
+              <span className="text-xs text-muted-foreground">
+                {voiceSettings.similarity_boost.toFixed(2)}
+              </span>
+            </div>
+            <Slider
+              value={[voiceSettings.similarity_boost]}
+              onValueChange={([value]) =>
+                onVoiceSettingsChange({
+                  ...voiceSettings,
+                  similarity_boost: value,
+                })
+              }
+              min={0}
+              max={1}
+              step={0.01}
+              className="w-full"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Bajo ← → Alto
+            </p>
+          </div>
+
+          <div>
+            <div className="flex justify-between mb-2">
+              <Label className="text-sm">Exageración de estilo</Label>
+              <span className="text-xs text-muted-foreground">
+                {voiceSettings.style.toFixed(2)}
+              </span>
+            </div>
+            <Slider
+              value={[voiceSettings.style]}
+              onValueChange={([value]) =>
+                onVoiceSettingsChange({ ...voiceSettings, style: value })
+              }
+              min={0}
+              max={1}
+              step={0.01}
+              className="w-full"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Ninguno ← → Exagerado
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Generate Button */}
+      <div className="space-y-4">
         <Button
           onClick={onGenerate}
           disabled={isGenerating}
           size="lg"
+          className="w-full"
         >
-          {isGenerating ? "Generando..." : "Generar Voiceover"}
+          {isGenerating ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Generando voiceover...
+            </>
+          ) : (
+            "Generar Voiceover Completo"
+          )}
         </Button>
 
         {voiceoverUrl && (
-          <Card className="p-4 flex-1">
-            <div className="flex items-center gap-4">
-              <Play className="w-5 h-5 text-primary" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">Voiceover generado</p>
-                <audio src={voiceoverUrl} controls className="w-full mt-2" />
+          <Card className="p-4">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Volume2 className="w-5 h-5 text-primary" />
+                <p className="font-medium">Voiceover generado</p>
               </div>
+              <audio src={voiceoverUrl} controls className="w-full" />
             </div>
           </Card>
         )}

@@ -18,6 +18,12 @@ export default function Studio() {
   const [isGeneratingVoice, setIsGeneratingVoice] = useState(false);
   const [voiceoverUrl, setVoiceoverUrl] = useState<string | null>(null);
   const [isRendering, setIsRendering] = useState(false);
+  const [voiceSettings, setVoiceSettings] = useState({
+    stability: 0.5,
+    similarity_boost: 0.75,
+    style: 0,
+    use_speaker_boost: false,
+  });
 
   const { data: project, isLoading } = useQuery({
     queryKey: ["project", projectId],
@@ -202,6 +208,8 @@ export default function Studio() {
             onGenerate={handleGenerateVoiceover}
             isGenerating={isGeneratingVoice}
             voiceoverUrl={voiceoverUrl}
+            voiceSettings={voiceSettings}
+            onVoiceSettingsChange={setVoiceSettings}
           />
         </Card>
 

@@ -17,3 +17,6 @@ verify_jwt = true
 
 [functions.generate-script-sections]
 verify_jwt = true
+
+[functions.preview-voice]
+verify_jwt = true
