@@ -97,21 +97,26 @@ export function VideoLinkInput({ brandId, onAnalysisStart }: VideoLinkInputProps
         </div>
         
         <h2 className="text-2xl font-bold mb-2">Pega tu link</h2>
-        <p className="text-muted-foreground mb-6">
+        <p className="text-muted-foreground mb-4">
           Pega el enlace de un video viral de YouTube, TikTok o Instagram
         </p>
-        <p className="text-xs text-muted-foreground mb-4">
-          ⚠️ Nota: Para TikTok e Instagram, necesitarás descargar el video primero usando{" "}
-          <a 
-            href="https://snaptik.app" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-primary underline hover:text-primary/80"
-          >
-            SnapTik
-          </a>
-          {" "}y luego subirlo en la sección "Subir Video"
-        </p>
+        
+        <div className="bg-muted/50 border border-border rounded-lg p-4 mb-6 text-sm">
+          <div className="flex items-start gap-3">
+            <div className="text-lg">ℹ️</div>
+            <div className="space-y-2">
+              <p className="font-semibold text-foreground">
+                Extracción automática de videos
+              </p>
+              <p className="text-muted-foreground">
+                Para extraer automáticamente el audio de videos de redes sociales, necesitas configurar <strong>RapidAPI</strong>.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Ver la guía completa en: <code className="bg-background px-1 py-0.5 rounded">docs/api-setup-guide.md</code>
+              </p>
+            </div>
+          </div>
+        </div>
 
         <div className="flex gap-3 mb-4">
           <Input

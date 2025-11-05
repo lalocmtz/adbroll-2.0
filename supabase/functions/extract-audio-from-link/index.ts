@@ -55,39 +55,38 @@ serve(async (req) => {
 
     console.log("[EXTRACT] Analysis record created:", analysis.id);
 
-    // Use yt-dlp to get video info and audio URL
-    // Note: For production, you'd run yt-dlp as subprocess, but for MVP we'll use a direct approach
-    let audioUrl: string | null = null;
-    let thumbnailUrl: string | null = null;
-
+    // Extract video info based on platform
+    let videoData: { audioUrl: string; thumbnailUrl: string };
+    
     try {
-      // For TikTok, Instagram, YouTube, we can use their oEmbed or direct APIs
-      // Simplified approach: try to fetch video info
-      console.log("[EXTRACT] Fetching video metadata...");
-
-      // Use yt-dlp format (simplified for demonstration)
-      // In production, this would call: yt-dlp -j --flat-playlist {{video_url}}
-      const videoInfo = await getVideoInfo(video_url);
+      console.log("[EXTRACT] Detecting platform and extracting video info...");
+      videoData = await extractVideoData(video_url);
+    } catch (error: any) {
+      console.error("[EXTRACT] Error extracting video data:", error);
       
-      audioUrl = videoInfo.audioUrl;
-      thumbnailUrl = videoInfo.thumbnail;
-
-      console.log("[EXTRACT] Metadata extracted");
-    } catch (error) {
-      console.error("[EXTRACT] Error fetching metadata:", error);
-      throw new Error("No se pudo extraer información del video. Verifica que el link sea válido y público.");
+      // Update analysis status to failed
+      await supabase
+        .from("video_analyses")
+        .update({
+          status: "failed",
+          error_message: error.message || "Unknown error during extraction",
+        })
+        .eq("id", analysis.id);
+      
+      throw error;
     }
 
-    // Download audio and send to Whisper
-    console.log("[EXTRACT] Downloading audio...");
+    // Download audio file
+    console.log("[EXTRACT] Downloading audio from:", videoData.audioUrl);
     let audioBlob: Blob;
     
     try {
-      const audioResponse = await fetch(audioUrl!);
+      const audioResponse = await fetch(videoData.audioUrl);
       if (!audioResponse.ok) {
-        throw new Error("Error downloading audio");
+        throw new Error(`Error downloading audio: ${audioResponse.status} ${audioResponse.statusText}`);
       }
       audioBlob = await audioResponse.blob();
+      console.log("[EXTRACT] Audio downloaded, size:", audioBlob.size, "bytes");
     } catch (error) {
       console.error("[EXTRACT] Error downloading audio:", error);
       throw new Error("No se pudo descargar el audio del video");
@@ -96,13 +95,14 @@ serve(async (req) => {
     // Transcribe with Whisper
     console.log("[EXTRACT] Transcribing with Whisper...");
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not configured");
+    if (!OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY not configured. Please add it in Supabase secrets.");
+    }
 
     const formData = new FormData();
     formData.append("file", audioBlob, "audio.mp3");
     formData.append("model", "whisper-1");
     formData.append("response_format", "verbose_json");
-    formData.append("language", "es");
 
     const whisperResponse = await fetch(
       "https://api.openai.com/v1/audio/transcriptions",
@@ -118,7 +118,7 @@ serve(async (req) => {
     if (!whisperResponse.ok) {
       const errorText = await whisperResponse.text();
       console.error("[EXTRACT] Whisper error:", errorText);
-      throw new Error("Error en transcripción de audio");
+      throw new Error(`Error en transcripción: ${whisperResponse.status}`);
     }
 
     const whisperData = await whisperResponse.json();
@@ -131,12 +131,13 @@ serve(async (req) => {
       .from("video_analyses")
       .update({
         transcription: transcription,
-        thumbnail_url: thumbnailUrl,
+        thumbnail_url: videoData.thumbnailUrl,
         status: "transcribed",
         metadata: {
           extracted_at: new Date().toISOString(),
           duration: whisperData.duration,
           segments_count: whisperData.segments?.length || 0,
+          language: whisperData.language,
         },
       })
       .eq("id", analysis.id);
@@ -147,9 +148,10 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({
+        success: true,
         analysis_id: analysis.id,
         transcription,
-        thumbnail_url: thumbnailUrl,
+        thumbnail_url: videoData.thumbnailUrl,
         duration: whisperData.duration,
       }),
       {
@@ -159,7 +161,11 @@ serve(async (req) => {
   } catch (error: any) {
     console.error("[EXTRACT] Error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        success: false,
+        error: error.message,
+        details: error.stack 
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -168,55 +174,213 @@ serve(async (req) => {
   }
 });
 
-// Helper function to extract video info
-// In production, this would use yt-dlp subprocess or proper APIs
-async function getVideoInfo(url: string): Promise<{ audioUrl: string; thumbnail: string }> {
-  // For TikTok
+/**
+ * Extract video data (audio URL + thumbnail) from different platforms
+ */
+async function extractVideoData(url: string): Promise<{ audioUrl: string; thumbnailUrl: string }> {
+  // TikTok
   if (url.includes("tiktok.com")) {
-    // Use TikTok's oEmbed or web scraping
-    // For MVP: Return mock data with guidance
-    throw new Error(
-      "Para videos de TikTok, por favor descarga el video primero usando SnapTik (snaptik.app) y súbelo directamente."
-    );
+    return await extractTikTokData(url);
   }
 
-  // For Instagram
+  // Instagram
   if (url.includes("instagram.com")) {
+    return await extractInstagramData(url);
+  }
+
+  // YouTube
+  if (url.includes("youtube.com") || url.includes("youtu.be")) {
+    return await extractYouTubeData(url);
+  }
+
+  // Facebook
+  if (url.includes("facebook.com") || url.includes("fb.watch")) {
+    return await extractFacebookData(url);
+  }
+
+  throw new Error(
+    "Plataforma no soportada. Actualmente soportamos: YouTube, TikTok, Instagram y Facebook."
+  );
+}
+
+/**
+ * Extract TikTok video data using RapidAPI TikTok Downloader
+ * Requires RAPIDAPI_KEY secret to be set
+ */
+async function extractTikTokData(url: string): Promise<{ audioUrl: string; thumbnailUrl: string }> {
+  const RAPIDAPI_KEY = Deno.env.get("RAPIDAPI_KEY");
+  
+  if (!RAPIDAPI_KEY) {
     throw new Error(
-      "Para videos de Instagram, por favor descarga el video primero y súbelo directamente."
+      "Para extraer videos de TikTok automáticamente, necesitas configurar RAPIDAPI_KEY. " +
+      "Alternativa: descarga el video manualmente usando SnapTik (snaptik.app) y súbelo."
     );
   }
 
-  // For YouTube
-  if (url.includes("youtube.com") || url.includes("youtu.be")) {
-    // Extract video ID
-    const videoId = extractYouTubeId(url);
-    if (!videoId) throw new Error("Invalid YouTube URL");
-
-    // Use YouTube's oEmbed
-    const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
-    const response = await fetch(oembedUrl);
+  try {
+    console.log("[TIKTOK] Fetching video data from RapidAPI...");
     
+    const response = await fetch(
+      `https://tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com/vid/index?url=${encodeURIComponent(url)}`,
+      {
+        method: "GET",
+        headers: {
+          "X-RapidAPI-Key": RAPIDAPI_KEY,
+          "X-RapidAPI-Host": "tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com",
+        },
+      }
+    );
+
     if (!response.ok) {
-      throw new Error("Error fetching YouTube video info");
+      throw new Error(`RapidAPI error: ${response.status}`);
     }
 
     const data = await response.json();
     
     return {
-      audioUrl: `https://www.youtube.com/watch?v=${videoId}`, // Placeholder - needs proper extraction
-      thumbnail: data.thumbnail_url,
+      audioUrl: data.music || data.video[0],
+      thumbnailUrl: data.cover || data.origin_cover,
     };
+  } catch (error) {
+    console.error("[TIKTOK] Error:", error);
+    throw new Error(
+      "No se pudo extraer el video de TikTok. Descarga el video manualmente usando SnapTik (snaptik.app) y súbelo."
+    );
   }
-
-  throw new Error("Plataforma no soportada. Soportamos YouTube, TikTok e Instagram.");
 }
 
+/**
+ * Extract Instagram video data using RapidAPI
+ */
+async function extractInstagramData(url: string): Promise<{ audioUrl: string; thumbnailUrl: string }> {
+  const RAPIDAPI_KEY = Deno.env.get("RAPIDAPI_KEY");
+  
+  if (!RAPIDAPI_KEY) {
+    throw new Error(
+      "Para extraer videos de Instagram automáticamente, necesitas configurar RAPIDAPI_KEY. " +
+      "Alternativa: descarga el video manualmente y súbelo."
+    );
+  }
+
+  try {
+    console.log("[INSTAGRAM] Fetching video data from RapidAPI...");
+    
+    const response = await fetch(
+      `https://instagram-scraper-api2.p.rapidapi.com/v1/post_info?code_or_id_or_url=${encodeURIComponent(url)}`,
+      {
+        method: "GET",
+        headers: {
+          "X-RapidAPI-Key": RAPIDAPI_KEY,
+          "X-RapidAPI-Host": "instagram-scraper-api2.p.rapidapi.com",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`RapidAPI error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const videoData = data.data?.video_url || data.data?.carousel_media?.[0]?.video_url;
+    
+    if (!videoData) {
+      throw new Error("No se encontró video en este post de Instagram");
+    }
+
+    return {
+      audioUrl: videoData,
+      thumbnailUrl: data.data?.thumbnail_url || data.data?.display_url,
+    };
+  } catch (error) {
+    console.error("[INSTAGRAM] Error:", error);
+    throw new Error(
+      "No se pudo extraer el video de Instagram. Descarga el video manualmente y súbelo."
+    );
+  }
+}
+
+/**
+ * Extract YouTube video data
+ * Note: For audio extraction, you'd need a service that provides direct audio URLs
+ */
+async function extractYouTubeData(url: string): Promise<{ audioUrl: string; thumbnailUrl: string }> {
+  const videoId = extractYouTubeId(url);
+  if (!videoId) {
+    throw new Error("URL de YouTube inválida");
+  }
+
+  try {
+    // Get thumbnail
+    const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+
+    // For audio extraction from YouTube, you'd need:
+    // 1. A YouTube API key to get video info
+    // 2. A service that provides direct audio stream URLs (like invidious or similar)
+    // 3. Or use RapidAPI's YouTube downloader
+    
+    const RAPIDAPI_KEY = Deno.env.get("RAPIDAPI_KEY");
+    
+    if (!RAPIDAPI_KEY) {
+      throw new Error(
+        "Para extraer audio de YouTube, necesitas configurar RAPIDAPI_KEY. " +
+        "Alternativa: descarga el video manualmente usando yt-dlp o similar."
+      );
+    }
+
+    console.log("[YOUTUBE] Fetching video data from RapidAPI...");
+    
+    const response = await fetch(
+      `https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`,
+      {
+        method: "GET",
+        headers: {
+          "X-RapidAPI-Key": RAPIDAPI_KEY,
+          "X-RapidAPI-Host": "youtube-mp36.p.rapidapi.com",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`RapidAPI error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    if (data.status !== "ok" || !data.link) {
+      throw new Error("No se pudo obtener el audio del video de YouTube");
+    }
+
+    return {
+      audioUrl: data.link,
+      thumbnailUrl: thumbnailUrl,
+    };
+  } catch (error) {
+    console.error("[YOUTUBE] Error:", error);
+    throw new Error(
+      "No se pudo extraer el video de YouTube. Descarga el video manualmente."
+    );
+  }
+}
+
+/**
+ * Extract Facebook video data
+ */
+async function extractFacebookData(url: string): Promise<{ audioUrl: string; thumbnailUrl: string }> {
+  throw new Error(
+    "La extracción automática de Facebook aún no está implementada. " +
+    "Descarga el video manualmente y súbelo."
+  );
+}
+
+/**
+ * Extract YouTube video ID from URL
+ */
 function extractYouTubeId(url: string): string | null {
   const patterns = [
     /(?:youtube\.com\/watch\?v=)([^&]+)/,
     /(?:youtu\.be\/)([^?]+)/,
     /(?:youtube\.com\/embed\/)([^?]+)/,
+    /(?:youtube\.com\/shorts\/)([^?]+)/,
   ];
 
   for (const pattern of patterns) {
