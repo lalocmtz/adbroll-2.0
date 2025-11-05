@@ -231,6 +231,7 @@ export default function Studio() {
             isRendering={isRendering}
             onRender={handleRender}
             disabled={!voiceoverUrl || clipAssignments.length === 0}
+            variantsProgress={[]}
           />
         </Card>
       </div>

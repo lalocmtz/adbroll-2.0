@@ -37,16 +37,30 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
+    // Helper function to update progress
+    const updateProgress = async (status: string, progress: number, message: string) => {
+      await supabase
+        .from("variants")
+        .update({
+          status: status as any,
+          metadata_json: {
+            progress_percent: progress,
+            progress_message: message,
+            updated_at: new Date().toISOString(),
+          },
+        })
+        .eq("id", variantId);
+      console.log(`Progress: ${progress}% - ${message}`);
+    };
+
     // Update variant status to rendering
-    await supabase
-      .from("variants")
-      .update({ status: "rendering" })
-      .eq("id", variantId);
+    await updateProgress("rendering", 0, "Iniciando renderizado...");
 
     // Generate SRT content
     const srtContent = generateSRT(scriptSections);
 
     // Step 1: Get signed URLs for all clips
+    await updateProgress("rendering", 10, "Obteniendo URLs de clips...");
     console.log("Getting signed URLs for clips...");
     const clipUrls: string[] = [];
     
@@ -68,6 +82,7 @@ serve(async (req) => {
     }
 
     // Step 2: Build Shotstack timeline
+    await updateProgress("rendering", 20, "Construyendo timeline de video...");
     console.log("Building Shotstack timeline...");
     
     // Create video clips for timeline
@@ -159,6 +174,7 @@ serve(async (req) => {
     console.log("Shotstack edit payload:", JSON.stringify(shotstackEdit, null, 2));
 
     // Step 3: Submit render to Shotstack
+    await updateProgress("rendering", 30, "Enviando a Shotstack...");
     console.log("Submitting render to Shotstack...");
     const renderResponse = await fetch(`${SHOTSTACK_API_URL}/render`, {
       method: "POST",
@@ -184,6 +200,7 @@ serve(async (req) => {
     }
 
     // Step 4: Poll for render completion
+    await updateProgress("rendering", 40, "Procesando video en Shotstack...");
     console.log("Polling for render completion...");
     let renderStatus = "queued";
     let renderUrl = null;
@@ -192,6 +209,10 @@ serve(async (req) => {
 
     while (renderStatus !== "done" && attempts < maxAttempts) {
       await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait 5 seconds
+
+      // Update progress based on attempts (40% to 70% range)
+      const progressPercent = 40 + Math.min(30, Math.floor((attempts / maxAttempts) * 30));
+      await updateProgress("rendering", progressPercent, `Renderizando video (${attempts + 1}/${maxAttempts})...`);
 
       const statusResponse = await fetch(
         `${SHOTSTACK_API_URL}/render/${renderId}`,
@@ -224,6 +245,7 @@ serve(async (req) => {
       throw new Error("Render timeout or failed to complete");
     }
 
+    await updateProgress("rendering", 75, "Descargando video renderizado...");
     console.log("Render completed, downloading from:", renderUrl);
 
     // Step 5: Download rendered video from Shotstack
@@ -236,6 +258,7 @@ serve(async (req) => {
     console.log("Video downloaded, size:", videoBlob.byteLength);
 
     // Step 6: Upload to Supabase storage
+    await updateProgress("rendering", 85, "Subiendo a Supabase Storage...");
     const videoPath = `${variantId}/video.mp4`;
     const srtPath = `${variantId}/subtitles.srt`;
 
@@ -266,6 +289,8 @@ serve(async (req) => {
     }
 
     // Step 7: Update variant status
+    await updateProgress("rendering", 95, "Finalizando...");
+    
     const renderMetadata = {
       shotstack_render_id: renderId,
       clips_count: clipUrls.length,
@@ -275,6 +300,8 @@ serve(async (req) => {
       fps: 30,
       rendered_with: "Shotstack API",
       rendered_at: new Date().toISOString(),
+      progress_percent: 100,
+      progress_message: "Completado",
     };
 
     const { error: updateError } = await supabase

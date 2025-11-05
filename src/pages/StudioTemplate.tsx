@@ -9,6 +9,7 @@ import { ArrowLeft, Loader2, RefreshCw, Sparkles, Volume2, Film } from "lucide-r
 import { VoiceSelection } from "@/components/studio/VoiceSelection";
 import { ScriptSection } from "@/components/studio/ScriptSection";
 import { VideoPreview } from "@/components/studio/VideoPreview";
+import { RenderProgress } from "@/components/studio/RenderProgress";
 
 interface SectionScript {
   sectionId: string;
@@ -51,6 +52,7 @@ export default function StudioTemplate() {
   const [isRendering, setIsRendering] = useState(false);
   const [generatedVariants, setGeneratedVariants] = useState<any[]>([]);
   const [variantSignedUrls, setVariantSignedUrls] = useState<Map<string, string>>(new Map());
+  const [variantsProgress, setVariantsProgress] = useState<any[]>([]);
   const [numVariants, setNumVariants] = useState(3);
   const [varyHookVisual, setVaryHookVisual] = useState(false);
 
@@ -61,6 +63,69 @@ export default function StudioTemplate() {
     }
     loadStudioData();
   }, []);
+
+  // Subscribe to realtime updates for variants
+  useEffect(() => {
+    if (generatedVariants.length === 0) return;
+
+    console.log("Setting up realtime subscription for variants:", generatedVariants.map(v => v.id));
+
+    const channel = supabase
+      .channel('variant-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'variants',
+          filter: `id=in.(${generatedVariants.map(v => v.id).join(',')})`,
+        },
+        (payload) => {
+          console.log('Variant updated:', payload);
+          const updatedVariant = payload.new;
+          
+          setVariantsProgress(prev => {
+            const existing = prev.find(v => v.id === updatedVariant.id);
+            const metadata = updatedVariant.metadata_json || {};
+            
+            const updated = {
+              id: updatedVariant.id,
+              status: updatedVariant.status,
+              progress: metadata.progress_percent || (existing?.progress || 0),
+              message: metadata.progress_message || (existing?.message || 'Procesando...'),
+            };
+
+            if (existing) {
+              return prev.map(v => v.id === updatedVariant.id ? updated : v);
+            } else {
+              return [...prev, updated];
+            }
+          });
+
+          // Update signed URLs when completed
+          if (updatedVariant.status === 'completed' && updatedVariant.video_url) {
+            supabase.storage
+              .from("renders")
+              .createSignedUrl(updatedVariant.video_url, 3600)
+              .then(({ data, error }) => {
+                if (!error && data?.signedUrl) {
+                  setVariantSignedUrls(prev => {
+                    const newMap = new Map(prev);
+                    newMap.set(updatedVariant.id, data.signedUrl);
+                    return newMap;
+                  });
+                }
+              });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log("Cleaning up realtime subscription");
+      supabase.removeChannel(channel);
+    };
+  }, [generatedVariants]);
 
   const loadStudioData = async () => {
     try {
@@ -370,29 +435,18 @@ export default function StudioTemplate() {
       }
 
       setGeneratedVariants(createdVariants);
-
-      // Generate signed URLs for all variants
-      const urlsMap = new Map();
-      for (const variant of createdVariants) {
-        if (variant.video_url) {
-          try {
-            const { data: signedData, error: signError } = await supabase.storage
-              .from("renders")
-              .createSignedUrl(variant.video_url, 3600); // 1 hour validity
-
-            if (!signError && signedData?.signedUrl) {
-              urlsMap.set(variant.id, signedData.signedUrl);
-            }
-          } catch (err) {
-            console.error("Error creating signed URL:", err);
-          }
-        }
-      }
-      setVariantSignedUrls(urlsMap);
+      
+      // Initialize progress tracking for all variants
+      setVariantsProgress(createdVariants.map(v => ({
+        id: v.id,
+        status: 'queued',
+        progress: 0,
+        message: 'En cola...',
+      })));
 
       toast({
-        title: `${numVariants} variantes generadas`,
-        description: "Los videos están listos",
+        title: `Renderizando ${numVariants} variantes`,
+        description: "Sigue el progreso en tiempo real abajo",
       });
     } catch (error: any) {
       console.error("Error rendering video:", error);
@@ -401,7 +455,6 @@ export default function StudioTemplate() {
         title: "Error al renderizar",
         description: error.message,
       });
-    } finally {
       setIsRendering(false);
     }
   };
@@ -536,6 +589,7 @@ export default function StudioTemplate() {
                     variant={numVariants === num ? "default" : "outline"}
                     onClick={() => setNumVariants(num)}
                     className="flex-1"
+                    disabled={isRendering}
                   >
                     {num} variantes
                   </Button>
@@ -553,6 +607,7 @@ export default function StudioTemplate() {
                 checked={varyHookVisual}
                 onChange={(e) => setVaryHookVisual(e.target.checked)}
                 className="rounded border-gray-300"
+                disabled={isRendering}
               />
               <Label htmlFor="varyHook" className="text-sm font-normal cursor-pointer">
                 Variar también el hook visual (video de entrada)
@@ -579,70 +634,91 @@ export default function StudioTemplate() {
             )}
           </Button>
 
-          {generatedVariants.length > 0 && (
+          {/* Real-time Progress Display */}
+          {variantsProgress.length > 0 && (
             <div className="mt-6">
               <h3 className="font-semibold mb-4">
-                {generatedVariants.length} video{generatedVariants.length > 1 ? "s" : ""} generado{generatedVariants.length > 1 ? "s" : ""}
+                Progreso de renderizado
+              </h3>
+              <RenderProgress
+                isRendering={isRendering}
+                onRender={handleRenderVideo}
+                disabled={!voiceoverUrl}
+                variantsProgress={variantsProgress}
+              />
+            </div>
+          )}
+
+          {/* Completed Variants */}
+          {generatedVariants.length > 0 && variantsProgress.some(v => v.status === 'completed') && (
+            <div className="mt-6">
+              <h3 className="font-semibold mb-4">
+                Videos completados
               </h3>
               <div className="space-y-3">
-                {generatedVariants.map((variant, idx) => (
-                  <Card key={idx} className="p-4 border-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="font-medium">Variante #{idx + 1}</p>
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
-                            Listo
-                          </span>
+                {generatedVariants.map((variant, idx) => {
+                  const progress = variantsProgress.find(v => v.id === variant.id);
+                  if (progress?.status !== 'completed') return null;
+
+                  return (
+                    <Card key={idx} className="p-4 border-2 border-green-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="font-medium">Variante #{idx + 1}</p>
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                              Listo
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Video renderizado con subtítulos y audio
+                          </p>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          Video renderizado con subtítulos y audio
-                        </p>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const url = variantSignedUrls.get(variant.id);
+                              if (url) {
+                                window.open(url, "_blank");
+                              } else {
+                                toast({
+                                  variant: "destructive",
+                                  title: "Error",
+                                  description: "URL del video no disponible",
+                                });
+                              }
+                            }}
+                          >
+                            Ver
+                          </Button>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={async () => {
+                              const url = variantSignedUrls.get(variant.id);
+                              if (url) {
+                                const link = document.createElement("a");
+                                link.href = url;
+                                link.download = `variante-${idx + 1}.mp4`;
+                                link.click();
+                              } else {
+                                toast({
+                                  variant: "destructive",
+                                  title: "Error",
+                                  description: "URL del video no disponible",
+                                });
+                              }
+                            }}
+                          >
+                            Descargar
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const url = variantSignedUrls.get(variant.id);
-                            if (url) {
-                              window.open(url, "_blank");
-                            } else {
-                              toast({
-                                variant: "destructive",
-                                title: "Error",
-                                description: "URL del video no disponible",
-                              });
-                            }
-                          }}
-                        >
-                          Ver
-                        </Button>
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onClick={async () => {
-                            const url = variantSignedUrls.get(variant.id);
-                            if (url) {
-                              const link = document.createElement("a");
-                              link.href = url;
-                              link.download = `variante-${idx + 1}.mp4`;
-                              link.click();
-                            } else {
-                              toast({
-                                variant: "destructive",
-                                title: "Error",
-                                description: "URL del video no disponible",
-                              });
-                            }
-                          }}
-                        >
-                          Descargar
-                        </Button>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
+                    </Card>
+                  );
+                })}
               </div>
             </div>
           )}
