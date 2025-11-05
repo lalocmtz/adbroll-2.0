@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Video, Plus } from "lucide-react";
+import { Video, Plus, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -12,25 +15,87 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
+interface TemplateSection {
+  id: string;
+  template_id: string;
+  type: string;
+  title: string;
+  description: string | null;
+  expected_duration: number;
+  text_prompt: string;
+  order_index: number;
+}
+
+interface Template {
+  id: string;
+  name: string;
+  description: string | null;
+  use_case: string | null;
+  preview_video_url: string | null;
+  is_public: boolean;
+  sections?: TemplateSection[];
+}
+
 const Templates = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState("Todas");
+  const { toast } = useToast();
+  const navigate = useNavigate();
 
   const templateCategories = [
     "Todas",
-    "Unboxing",
     "Problema + solución",
-    "Lista de beneficios",
+    "Demo producto",
+    "Retargeting",
     "Urgencia",
-    "Mini historia",
-    "Antes y después",
+    "Ofertas",
   ];
 
-  const templates = [
-    { name: "Unboxing", subtitle: "Tha adlgd gummies", category: "Unboxing" },
-    { name: "Problema + solución", subtitle: "Tha adlgd gummies", category: "Problema + solución" },
-    { name: "Lista de beneficios", subtitle: "Tha adlgd gummies", category: "Lista de beneficios" },
-    { name: "Urgencia", subtitle: "Tha adlgd gummies", category: "Urgencia" },
-  ];
+  useEffect(() => {
+    loadTemplates();
+  }, []);
+
+  const loadTemplates = async () => {
+    try {
+      setIsLoading(true);
+      const { data: templatesData, error: templatesError } = await supabase
+        .from("templates")
+        .select("*")
+        .eq("is_public", true);
+
+      if (templatesError) throw templatesError;
+
+      // Load sections for each template
+      const templatesWithSections = await Promise.all(
+        (templatesData || []).map(async (template) => {
+          const { data: sections } = await supabase
+            .from("template_sections")
+            .select("*")
+            .eq("template_id", template.id)
+            .order("order_index");
+
+          return { ...template, sections: sections || [] };
+        })
+      );
+
+      setTemplates(templatesWithSections);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error al cargar plantillas",
+        description: error.message,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUseTemplate = (template: Template) => {
+    // Navigate to Studio with template selected
+    navigate("/studio", { state: { templateId: template.id } });
+  };
 
   const blocks = [
     { name: "HOOK", duration: 3 },
@@ -127,11 +192,11 @@ const Templates = () => {
 
       {/* Category Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-2">
-        {templateCategories.map((category, index) => (
+        {templateCategories.map((category) => (
           <Button
-            key={index}
-            variant={index === 0 ? "default" : "outline"}
-            className={index === 0 ? "bg-primary text-primary-foreground" : ""}
+            key={category}
+            variant={selectedCategory === category ? "default" : "outline"}
+            onClick={() => setSelectedCategory(category)}
           >
             {category}
           </Button>
@@ -139,23 +204,58 @@ const Templates = () => {
       </div>
 
       {/* Templates Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {templates.map((template, index) => (
-          <Card
-            key={index}
-            className="group p-6 hover-lift cursor-pointer bg-secondary/30"
-          >
-            <div className="aspect-[3/4] bg-secondary/50 rounded-lg flex items-center justify-center mb-4">
-              <Video className="w-12 h-12 text-muted-foreground/30" />
-            </div>
-            <h3 className="text-sm font-semibold mb-1">{template.name}</h3>
-            <p className="text-xs text-muted-foreground">{template.subtitle}</p>
-            <Button variant="outline" size="sm" className="w-full mt-4">
-              Usar con mi marca
-            </Button>
-          </Card>
-        ))}
-      </div>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {templates.map((template) => (
+            <Card
+              key={template.id}
+              className="group p-6 hover-lift cursor-pointer bg-secondary/30"
+            >
+              <div className="aspect-[3/4] bg-secondary/50 rounded-lg flex items-center justify-center mb-4">
+                <Video className="w-12 h-12 text-muted-foreground/30" />
+              </div>
+              <div className="space-y-2 mb-4">
+                <h3 className="text-sm font-semibold">{template.name}</h3>
+                <p className="text-xs text-muted-foreground line-clamp-2">
+                  {template.description}
+                </p>
+                <p className="text-xs text-accent font-medium">
+                  {template.use_case}
+                </p>
+                {template.sections && template.sections.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {template.sections.slice(0, 3).map((section) => (
+                      <span
+                        key={section.id}
+                        className="text-xs bg-accent/10 text-accent px-2 py-1 rounded"
+                      >
+                        {section.title}
+                      </span>
+                    ))}
+                    {template.sections.length > 3 && (
+                      <span className="text-xs text-muted-foreground px-2 py-1">
+                        +{template.sections.length - 3}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => handleUseTemplate(template)}
+              >
+                Usar con mi marca
+              </Button>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

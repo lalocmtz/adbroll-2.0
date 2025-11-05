@@ -331,6 +331,50 @@ export type Database = {
           },
         ]
       }
+      template_sections: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          expected_duration: number
+          id: string
+          order_index: number
+          template_id: string
+          text_prompt: string
+          title: string
+          type: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          expected_duration: number
+          id?: string
+          order_index: number
+          template_id: string
+          text_prompt: string
+          title: string
+          type: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          expected_duration?: number
+          id?: string
+          order_index?: number
+          template_id?: string
+          text_prompt?: string
+          title?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "template_sections_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       templates: {
         Row: {
           created_at: string
@@ -338,8 +382,10 @@ export type Database = {
           id: string
           is_public: boolean | null
           name: string
-          slots: Json
+          preview_video_url: string | null
+          slots: Json | null
           thumbnail_url: string | null
+          use_case: string | null
           user_id: string | null
         }
         Insert: {
@@ -348,8 +394,10 @@ export type Database = {
           id?: string
           is_public?: boolean | null
           name: string
-          slots: Json
+          preview_video_url?: string | null
+          slots?: Json | null
           thumbnail_url?: string | null
+          use_case?: string | null
           user_id?: string | null
         }
         Update: {
@@ -358,8 +406,10 @@ export type Database = {
           id?: string
           is_public?: boolean | null
           name?: string
-          slots?: Json
+          preview_video_url?: string | null
+          slots?: Json | null
           thumbnail_url?: string | null
+          use_case?: string | null
           user_id?: string | null
         }
         Relationships: []
