@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import { ArrowLeft, Loader2, RefreshCw, Sparkles, Volume2, Film } from "lucide-react";
 import { VoiceSelection } from "@/components/studio/VoiceSelection";
 import { ScriptSection } from "@/components/studio/ScriptSection";
@@ -36,6 +37,7 @@ export default function StudioTemplate() {
   const [isGeneratingScripts, setIsGeneratingScripts] = useState(false);
   const [isRegeneratingSection, setIsRegeneratingSection] = useState<string | null>(null);
   
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [selectedVoice, setSelectedVoice] = useState("EXAVITQu4vr4xnSDxMaL");
   const [voiceoverUrl, setVoiceoverUrl] = useState<string | null>(null);
   const [isGeneratingVoice, setIsGeneratingVoice] = useState(false);
@@ -48,6 +50,8 @@ export default function StudioTemplate() {
 
   const [isRendering, setIsRendering] = useState(false);
   const [generatedVariants, setGeneratedVariants] = useState<any[]>([]);
+  const [numVariants, setNumVariants] = useState(3);
+  const [varyHookVisual, setVaryHookVisual] = useState(false);
 
   useEffect(() => {
     if (!templateId || !brandId || !assignments) {
@@ -260,6 +264,15 @@ export default function StudioTemplate() {
       return;
     }
 
+    if (!projectId) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No hay proyecto creado. Genera primero los guiones.",
+      });
+      return;
+    }
+
     try {
       setIsRendering(true);
 
@@ -268,55 +281,74 @@ export default function StudioTemplate() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("No authenticated");
 
-      // Create variant record
-      const { data: variant, error: variantError } = await supabase
-        .from("variants")
-        .insert({
-          user_id: user.id,
-          project_id: templateId,
-          status: "queued",
-        })
-        .select()
-        .single();
+      console.log(`Creating ${numVariants} variants...`);
+      const createdVariants = [];
 
-      if (variantError) throw variantError;
+      for (let i = 0; i < numVariants; i++) {
+        // Create variant record
+        const { data: variant, error: variantError} = await supabase
+          .from("variants")
+          .insert({
+            user_id: user.id,
+            project_id: projectId,
+            status: "queued",
+          })
+          .select()
+          .single();
 
-      // Prepare clip assignments with scripts
-      const clipAssignments = assignments.map((a: Assignment) => {
-        const clip = clips.get(a.clipId);
-        const script = scripts.find((s) => s.sectionId === a.sectionId);
-        const section = sections.find((s) => s.id === a.sectionId);
+        if (variantError) {
+          console.error("Error creating variant:", variantError);
+          throw variantError;
+        }
 
-        return {
-          sectionId: a.sectionId,
-          clipId: a.clipId,
-          clipUrl: clip?.storage_path,
-          sectionType: section?.type,
-          sectionTitle: section?.title,
-          duration: section?.expected_duration,
-          script: script?.text || "",
-        };
-      });
+        console.log("Variant created:", variant.id);
 
-      // Call render function
-      const { data: renderData, error: renderError } =
-        await supabase.functions.invoke("render-variant", {
-          body: {
-            variantId: variant.id,
-            clipAssignments,
-            voiceoverUrl,
-            scriptSections: scripts,
-          },
+        // Prepare clip assignments with scripts
+        const clipAssignments = assignments.map((a: Assignment) => {
+          const clip = clips.get(a.clipId);
+          const script = scripts.find((s) => s.sectionId === a.sectionId);
+          const section = sections.find((s) => s.id === a.sectionId);
+
+          return {
+            sectionId: a.sectionId,
+            clipId: a.clipId,
+            clipUrl: clip?.storage_path,
+            sectionType: section?.type,
+            sectionTitle: section?.title,
+            duration: section?.expected_duration,
+            script: script?.text || "",
+          };
         });
 
-      if (renderError) throw renderError;
+        // Call render function
+        const { data: renderData, error: renderError } =
+          await supabase.functions.invoke("render-variant", {
+            body: {
+              variantId: variant.id,
+              clipAssignments,
+              voiceoverUrl,
+              scriptSections: scripts.map((s) => ({
+                ...s,
+                duration: sections.find((sec) => sec.id === s.sectionId)
+                  ?.expected_duration || 3,
+              })),
+            },
+          });
+
+        if (renderError) {
+          console.error("Error rendering variant:", renderError);
+          throw renderError;
+        }
+
+        createdVariants.push({ ...variant, renderData });
+      }
+
+      setGeneratedVariants(createdVariants);
 
       toast({
-        title: "Video renderizado",
-        description: "Tu video está listo para descargar",
+        title: `${numVariants} variantes generadas`,
+        description: "Los videos están listos",
       });
-
-      setGeneratedVariants((prev) => [renderData, ...prev]);
     } catch (error: any) {
       console.error("Error rendering video:", error);
       toast({
@@ -440,11 +472,48 @@ export default function StudioTemplate() {
           <h2 className="text-lg font-semibold">Renderizar video</h2>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-6">
           <p className="text-sm text-muted-foreground">
             Una vez que hayas generado la voz y revisado los guiones, puedes
             renderizar el video final con subtítulos sincronizados.
           </p>
+
+          {/* Variant Options */}
+          <div className="space-y-4">
+            <div>
+              <Label className="text-sm font-medium mb-2 block">
+                Número de variantes
+              </Label>
+              <div className="flex gap-4">
+                {[3, 5].map((num) => (
+                  <Button
+                    key={num}
+                    variant={numVariants === num ? "default" : "outline"}
+                    onClick={() => setNumVariants(num)}
+                    className="flex-1"
+                  >
+                    {num} variantes
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Las variantes tendrán guiones diferentes generados por IA
+              </p>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="varyHook"
+                checked={varyHookVisual}
+                onChange={(e) => setVaryHookVisual(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              <Label htmlFor="varyHook" className="text-sm font-normal cursor-pointer">
+                Variar también el hook visual (video de entrada)
+              </Label>
+            </div>
+          </div>
 
           <Button
             onClick={handleRenderVideo}
@@ -455,32 +524,57 @@ export default function StudioTemplate() {
             {isRendering ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                Renderizando...
+                Generando {numVariants} variantes...
               </>
             ) : (
               <>
                 <Film className="w-5 h-5 mr-2" />
-                Generar Video Final
+                Generar {numVariants} Variantes
               </>
             )}
           </Button>
 
           {generatedVariants.length > 0 && (
             <div className="mt-6">
-              <h3 className="font-semibold mb-3">Videos generados</h3>
-              <div className="space-y-2">
+              <h3 className="font-semibold mb-4">
+                {generatedVariants.length} video{generatedVariants.length > 1 ? "s" : ""} generado{generatedVariants.length > 1 ? "s" : ""}
+              </h3>
+              <div className="space-y-3">
                 {generatedVariants.map((variant, idx) => (
-                  <Card key={idx} className="p-4">
+                  <Card key={idx} className="p-4 border-2">
                     <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">Video #{idx + 1}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {variant.note}
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="font-medium">Variante #{idx + 1}</p>
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                            Listo
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Video renderizado con subtítulos y audio
                         </p>
                       </div>
-                      <Button variant="outline" size="sm">
-                        Descargar
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(variant.renderData?.videoUrl || variant.video_url, "_blank")}
+                        >
+                          Ver
+                        </Button>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => {
+                            const link = document.createElement("a");
+                            link.href = variant.renderData?.videoUrl || variant.video_url;
+                            link.download = `variante-${idx + 1}.mp4`;
+                            link.click();
+                          }}
+                        >
+                          Descargar
+                        </Button>
+                      </div>
                     </div>
                   </Card>
                 ))}
