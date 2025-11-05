@@ -39,16 +39,9 @@ serve(async (req) => {
     // Generate SRT file from script sections
     const srtContent = generateSRT(scriptSections);
 
-    // For MVP: Create a placeholder render
-    // In production, this would use FFmpeg to:
-    // 1. Download all assigned clips
-    // 2. Download voiceover
-    // 3. Concat clips with timing
-    // 4. Overlay voiceover
-    // 5. Burn subtitles
-    // 6. Upload final video
-
-    // For now, we'll store the rendering instructions
+    // For MVP: Create a placeholder render using the first clip
+    // In production, this would use FFmpeg to properly render everything
+    
     const renderMetadata = {
       clips: clipAssignments,
       voiceover_url: voiceoverUrl,
@@ -71,12 +64,62 @@ serve(async (req) => {
       rendered_at: new Date().toISOString(),
     };
 
-    // Simulate rendering delay
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // Store the video path (not public URL - we'll use signed URLs)
+    // Store paths
     const videoPath = `${variantId}/video.mp4`;
     const srtPath = `${variantId}/subtitles.srt`;
+
+    // Create placeholder video by copying the first assigned clip
+    if (clipAssignments && clipAssignments.length > 0) {
+      const firstClip = clipAssignments[0];
+      
+      if (firstClip.clipUrl) {
+        try {
+          // Download the first clip from broll bucket
+          const { data: clipData, error: downloadError } = await supabase.storage
+            .from("broll")
+            .download(firstClip.clipUrl);
+
+          if (downloadError) {
+            console.error("Error downloading clip:", downloadError);
+          } else if (clipData) {
+            // Upload to renders bucket as the output video
+            const { error: uploadError } = await supabase.storage
+              .from("renders")
+              .upload(videoPath, clipData, {
+                contentType: "video/mp4",
+                upsert: true,
+              });
+
+            if (uploadError) {
+              console.error("Error uploading placeholder video:", uploadError);
+            } else {
+              console.log("Placeholder video created successfully");
+            }
+          }
+        } catch (err) {
+          console.error("Error creating placeholder video:", err);
+        }
+      }
+    }
+
+    // Upload SRT file to renders bucket
+    try {
+      const { error: srtUploadError } = await supabase.storage
+        .from("renders")
+        .upload(srtPath, srtContent, {
+          contentType: "text/plain",
+          upsert: true,
+        });
+
+      if (srtUploadError) {
+        console.error("Error uploading SRT:", srtUploadError);
+      }
+    } catch (err) {
+      console.error("Error uploading SRT file:", err);
+    }
+
+    // Simulate rendering delay
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // Update variant with results
     const { error: updateError } = await supabase
