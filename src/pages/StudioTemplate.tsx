@@ -208,6 +208,10 @@ export default function StudioTemplate() {
   const handleGenerateVoiceover = async () => {
     const fullScript = scripts.map((s) => s.text).join(" ");
 
+    console.log("Generating voiceover with script:", fullScript);
+    console.log("Voice ID:", selectedVoice);
+    console.log("Voice settings:", voiceSettings);
+
     try {
       setIsGeneratingVoice(true);
 
@@ -224,6 +228,9 @@ export default function StudioTemplate() {
       );
 
       if (error) throw error;
+
+      console.log("Voiceover generated, response:", data);
+      console.log("Audio URL:", data.audioUrl);
 
       setVoiceoverUrl(data.audioUrl);
 

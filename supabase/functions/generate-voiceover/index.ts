@@ -87,17 +87,22 @@ serve(async (req) => {
       throw uploadError;
     }
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
+    // Get signed URL (valid for 24 hours)
+    const { data: urlData, error: signError } = await supabase.storage
       .from("renders")
-      .getPublicUrl(fileName);
+      .createSignedUrl(fileName, 86400);
 
-    console.log("Voiceover generated successfully:", urlData.publicUrl);
+    if (signError) {
+      console.error("Signed URL error:", signError);
+      throw signError;
+    }
+
+    console.log("Voiceover generated successfully:", urlData.signedUrl);
 
     return new Response(
       JSON.stringify({
         success: true,
-        audioUrl: urlData.publicUrl,
+        audioUrl: urlData.signedUrl,
         fileName,
       }),
       {

@@ -64,11 +64,29 @@ export function VoiceSelection({
 
       if (error) throw error;
 
-      // Play audio preview
+      console.log("Preview voice response:", data);
+
+      // Play audio preview - create full URL from Supabase storage
       const audio = new Audio(data.audioUrl);
-      audio.play();
       
-      audio.onended = () => setPreviewingVoice(null);
+      audio.onerror = (e) => {
+        console.error("Audio playback error:", e);
+        toast({
+          variant: "destructive",
+          title: "Error al reproducir audio",
+          description: "No se pudo reproducir el preview de la voz",
+        });
+        setPreviewingVoice(null);
+      };
+
+      audio.onended = () => {
+        console.log("Audio preview ended");
+        setPreviewingVoice(null);
+      };
+
+      await audio.play();
+      console.log("Audio playing...");
+      
     } catch (error: any) {
       console.error("Error previewing voice:", error);
       toast({
@@ -229,7 +247,17 @@ export function VoiceSelection({
                 <Volume2 className="w-5 h-5 text-primary" />
                 <p className="font-medium">Voiceover generado</p>
               </div>
-              <audio src={voiceoverUrl} controls className="w-full" />
+              <audio 
+                key={voiceoverUrl}
+                src={voiceoverUrl} 
+                controls 
+                className="w-full"
+                onError={(e) => {
+                  console.error("Audio error in voiceover player:", e);
+                  console.error("Failed URL:", voiceoverUrl);
+                }}
+                onCanPlay={() => console.log("Voiceover audio can play:", voiceoverUrl)}
+              />
             </div>
           </Card>
         )}
