@@ -140,7 +140,19 @@ IMPORTANTE:
       throw new Error("Invalid AI response format");
     }
 
-    return new Response(JSON.stringify(parsedScripts), {
+    // Map the AI response to use actual section IDs
+    const mappedScripts = parsedScripts.scripts.map((script: any) => {
+      const matchingSection = sections.find(
+        (s: any) => s.type.toUpperCase() === script.sectionId
+      );
+      
+      return {
+        sectionId: matchingSection?.id || script.sectionId,
+        text: script.text,
+      };
+    });
+
+    return new Response(JSON.stringify({ scripts: mappedScripts }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
