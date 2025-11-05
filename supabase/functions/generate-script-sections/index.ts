@@ -143,13 +143,23 @@ IMPORTANTE:
     // Map the AI response to use actual section IDs
     const mappedScripts = parsedScripts.scripts.map((script: any) => {
       const matchingSection = sections.find(
-        (s: any) => s.type.toUpperCase() === script.sectionId
+        (s: any) => s.type.toUpperCase() === script.sectionId.toUpperCase()
       );
+      
+      if (!matchingSection) {
+        console.warn(`No matching section found for sectionId: ${script.sectionId}`);
+      }
       
       return {
         sectionId: matchingSection?.id || script.sectionId,
         text: script.text,
       };
+    });
+
+    console.log('Mapping scripts:', {
+      received: parsedScripts.scripts.map((s: any) => s.sectionId),
+      sections: sections.map((s: any) => ({ id: s.id, type: s.type })),
+      mapped: mappedScripts
     });
 
     return new Response(JSON.stringify({ scripts: mappedScripts }), {

@@ -168,13 +168,15 @@ export default function StudioTemplate() {
       if (error) throw error;
 
       // Update just this section
-      setScripts((prev) =>
-        prev.map((s) =>
+      setScripts((prev) => {
+        const updated = prev.map((s) =>
           s.sectionId === sectionId
-            ? { ...s, text: data.scripts[0].text }
+            ? { ...s, text: data.scripts[0]?.text || s.text }
             : s
-        )
-      );
+        );
+        console.log('Updated scripts:', updated);
+        return updated;
+      });
 
       toast({
         title: "Sección regenerada",
