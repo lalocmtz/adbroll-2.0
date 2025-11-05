@@ -359,6 +359,80 @@ export default function StudioTemplate() {
     }
   };
 
+  // Polling function to check variant progress in real-time
+  const pollVariantProgress = async (variantId: string) => {
+    console.log(`🔄 [POLLING] Starting polling for variant ${variantId}`);
+    
+    const pollInterval = setInterval(async () => {
+      try {
+        const { data: variant, error } = await supabase
+          .from("variants")
+          .select("status, metadata_json, error_message")
+          .eq("id", variantId)
+          .single();
+
+        if (error) {
+          console.error("❌ [POLLING] Error fetching variant:", error);
+          return;
+        }
+
+        console.log(`🔄 [POLLING] Variant ${variantId} - Status: ${variant?.status}`);
+
+        // Update progress if available
+        if (variant?.metadata_json) {
+          const progress = variant.metadata_json as any;
+          if (progress.progress_percent !== undefined) {
+            console.log(`⏳ [POLLING] Progress: ${progress.progress_percent}% - ${progress.progress_message || ''}`);
+            
+            // Update variants progress state
+            setVariantsProgress(prev => 
+              prev.map(v => 
+                v.id === variantId 
+                  ? {
+                      ...v,
+                      progress: progress.progress_percent,
+                      message: progress.progress_message || 'Procesando...',
+                      status: variant.status as any,
+                    }
+                  : v
+              )
+            );
+          }
+        }
+
+        // Stop polling when completed or failed
+        if (variant?.status === "completed") {
+          console.log("✅ [POLLING] Render completed!");
+          clearInterval(pollInterval);
+          setIsRendering(false);
+          toast({
+            title: "¡Video generado!",
+            description: "El video se ha renderizado exitosamente",
+          });
+        } else if (variant?.status === "failed") {
+          console.error("❌ [POLLING] Render failed:", variant?.error_message);
+          clearInterval(pollInterval);
+          setIsRendering(false);
+          toast({
+            variant: "destructive",
+            title: "Error al renderizar",
+            description: variant?.error_message || 'Error desconocido',
+          });
+        }
+      } catch (error) {
+        console.error("💥 [POLLING] Critical error:", error);
+        clearInterval(pollInterval);
+        setIsRendering(false);
+      }
+    }, 2000); // Poll every 2 seconds
+
+    // Return cleanup function
+    return () => {
+      console.log(`🛑 [POLLING] Stopping polling for variant ${variantId}`);
+      clearInterval(pollInterval);
+    };
+  };
+
   const handleRenderVideo = async () => {
     console.log("🚀 [FRONTEND] handleRenderVideo called");
     console.log("📊 [FRONTEND] Initial state:", {
@@ -447,6 +521,10 @@ export default function StudioTemplate() {
           };
         });
 
+        // Start polling for this variant BEFORE invoking the function
+        console.log(`🔄 [FRONTEND] Starting polling for variant ${variant.id}`);
+        pollVariantProgress(variant.id);
+
         // Call render function
         console.log(`🎬 [FRONTEND] Invoking render-variant for variant ${variant.id}`);
         console.log(`📦 [FRONTEND] Payload:`, {
@@ -506,8 +584,8 @@ export default function StudioTemplate() {
       console.log("📊 [FRONTEND] Progress tracking initialized for variants:", createdVariants.map(v => v.id));
 
       toast({
-        title: `Renderizando ${numVariants} variantes`,
-        description: "Sigue el progreso en tiempo real abajo",
+        title: `Renderizando ${numVariants} variante(s)`,
+        description: "El progreso se actualiza cada 2 segundos",
       });
     } catch (error: any) {
       console.error("❌❌❌ [FRONTEND] CRITICAL ERROR in handleRenderVideo:", error);
@@ -522,6 +600,7 @@ export default function StudioTemplate() {
       });
       setIsRendering(false);
     }
+    // Note: Don't set isRendering to false here - let polling handle it when status changes
   };
 
   if (!template || !brand || sections.length === 0) {
