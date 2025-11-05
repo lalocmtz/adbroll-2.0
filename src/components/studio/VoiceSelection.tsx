@@ -13,7 +13,7 @@ interface VoiceSelectionProps {
   onGenerate: () => void;
   isGenerating: boolean;
   voiceoverUrl: string | null;
-  voiceSettings: VoiceSettings;
+  voiceSettings?: VoiceSettings;
   onVoiceSettingsChange: (settings: VoiceSettings) => void;
 }
 
@@ -41,7 +41,12 @@ export function VoiceSelection({
   onGenerate,
   isGenerating,
   voiceoverUrl,
-  voiceSettings,
+  voiceSettings = {
+    stability: 0.5,
+    similarity_boost: 0.75,
+    style: 0,
+    use_speaker_boost: false,
+  },
   onVoiceSettingsChange,
 }: VoiceSelectionProps) {
   const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
