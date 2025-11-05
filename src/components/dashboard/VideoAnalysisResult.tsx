@@ -92,7 +92,7 @@ export function VideoAnalysisResult({ analysisId, onAdaptToBrand }: VideoAnalysi
     }
   };
 
-  if (isLoading || !analysis) {
+  if (isLoading || !analysis || analysis.status === "processing") {
     return (
       <Card className="p-8">
         <div className="flex items-center justify-center gap-3">
