@@ -167,7 +167,6 @@ serve(async (req) => {
           height: 1920,
         },
         fps: 30,
-        scaleTo: "crop",
       },
     };
 
