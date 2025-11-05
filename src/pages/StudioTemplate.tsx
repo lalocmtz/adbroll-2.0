@@ -12,6 +12,7 @@ import { VideoPreview } from "@/components/studio/VideoPreview";
 import { RenderProgress } from "@/components/studio/RenderProgress";
 import { VariantCountSelector } from "@/components/studio/VariantCountSelector";
 import { VariationTypeSelector } from "@/components/studio/VariationTypeSelector";
+import { HookVariantTypeSelector } from "@/components/studio/HookVariantTypeSelector";
 import { HookSelector } from "@/components/studio/HookSelector";
 import { HookPreview } from "@/components/studio/HookPreview";
 
@@ -29,7 +30,8 @@ interface Assignment {
 interface HookConfig {
   variantIndex: number;
   clipId: string;
-  headlineStyle: "text-over-black" | "text-over-video" | "none";
+  folderId?: string;
+  skipVariant?: boolean;
 }
 
 export default function StudioTemplate() {
@@ -65,6 +67,7 @@ export default function StudioTemplate() {
   const [variantsProgress, setVariantsProgress] = useState<any[]>([]);
   const [numVariants, setNumVariants] = useState(1);
   const [variationType, setVariationType] = useState<"hook" | "full">("hook");
+  const [hookVariantType, setHookVariantType] = useState<"text" | "visual">("text");
   const [hookConfigs, setHookConfigs] = useState<HookConfig[]>([]);
 
   useEffect(() => {
@@ -519,18 +522,38 @@ export default function StudioTemplate() {
       {numVariants === 3 && variationType === "hook" && brandId && (
         <Card className="p-6">
           <div className="space-y-4">
-            <div>
-              <p className="text-sm font-medium mb-1">Tus hooks para esta campaña 🎯</p>
-              <p className="text-xs text-muted-foreground">
-                Esto es lo que verá tu cliente en los primeros 3 segundos
-              </p>
-            </div>
-            <HookSelector
-              brandId={brandId}
-              numVariants={numVariants}
-              hooks={hookConfigs}
-              onChange={setHookConfigs}
+            <HookVariantTypeSelector
+              type={hookVariantType}
+              onChange={setHookVariantType}
             />
+
+            {hookVariantType === "text" && (
+              <Card className="p-6 border-dashed bg-muted/30">
+                <div className="text-center space-y-2">
+                  <p className="font-medium">Variantes de texto 📝</p>
+                  <p className="text-sm text-muted-foreground">
+                    Se generarán 3 textos diferentes como hook con el mismo clip visual
+                  </p>
+                </div>
+              </Card>
+            )}
+
+            {hookVariantType === "visual" && (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm font-medium mb-1">Tus hooks para esta campaña 🎯</p>
+                  <p className="text-xs text-muted-foreground">
+                    Esto es lo que verá tu cliente en los primeros 3 segundos
+                  </p>
+                </div>
+                <HookSelector
+                  brandId={brandId}
+                  numVariants={numVariants}
+                  hooks={hookConfigs}
+                  onChange={setHookConfigs}
+                />
+              </div>
+            )}
           </div>
         </Card>
       )}
