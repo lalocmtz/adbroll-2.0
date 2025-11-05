@@ -10,7 +10,8 @@ const corsHeaders = {
 interface TranscribeRequest {
   video_url?: string;
   video_file_path?: string;
-  analysis_id: string;
+  brand_id: string; // Required to create analysis record
+  analysis_id?: string; // Optional: if already created
 }
 
 serve(async (req) => {
@@ -19,9 +20,9 @@ serve(async (req) => {
   }
 
   try {
-    const { video_url, video_file_path, analysis_id }: TranscribeRequest = await req.json();
+    const { video_url, video_file_path, brand_id, analysis_id }: TranscribeRequest = await req.json();
     
-    console.log(`🎙️ [TRANSCRIBE] Starting transcription for analysis: ${analysis_id}`);
+    console.log(`🎙️ [TRANSCRIBE] Starting transcription for brand: ${brand_id}`);
 
     // Initialize Supabase client
     const supabaseClient = createClient(
@@ -43,6 +44,33 @@ serve(async (req) => {
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     if (!OPENAI_API_KEY) {
       throw new Error('OPENAI_API_KEY no configurada');
+    }
+
+    // Create or use existing analysis record
+    let currentAnalysisId: string;
+    
+    if (analysis_id) {
+      // Use provided analysis_id
+      currentAnalysisId = analysis_id;
+      console.log(`📝 [TRANSCRIBE] Using existing analysis: ${currentAnalysisId}`);
+    } else {
+      // Create new analysis record
+      const { data: newAnalysis, error: createError } = await supabaseClient
+        .from('video_analyses')
+        .insert({
+          user_id: user.id,
+          brand_id: brand_id,
+          source_url: video_url || '',
+          video_file_path: video_file_path || null,
+          status: 'transcribing',
+        })
+        .select()
+        .single();
+
+      if (createError) throw createError;
+      
+      currentAnalysisId = newAnalysis.id;
+      console.log(`📝 [TRANSCRIBE] Created new analysis: ${currentAnalysisId}`);
     }
 
     // Determine video source
@@ -110,7 +138,7 @@ serve(async (req) => {
           status: 'failed',
           error_message: 'El video no contiene suficiente audio claro para transcribir. Intenta con un video que tenga voiceover o diálogo.',
         })
-        .eq('id', analysis_id);
+        .eq('id', currentAnalysisId);
 
       return new Response(
         JSON.stringify({
@@ -130,13 +158,14 @@ serve(async (req) => {
       .from('video_analyses')
       .update({
         transcription: transcriptionData.text,
+        status: 'transcribed',
         metadata: {
           whisper_segments: transcriptionData.segments || [],
           duration: transcriptionData.duration,
           language: transcriptionData.language || 'es'
         }
       })
-      .eq('id', analysis_id);
+      .eq('id', currentAnalysisId);
 
     if (updateError) {
       throw new Error(`Error al actualizar análisis: ${updateError.message}`);
@@ -147,6 +176,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
+        analysis_id: currentAnalysisId,
         transcription: transcriptionData.text,
         duration: transcriptionData.duration,
         segments_count: transcriptionData.segments?.length || 0,

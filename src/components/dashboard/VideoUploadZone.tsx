@@ -50,18 +50,31 @@ export function VideoUploadZone({ brandId, onAnalysisStart }: VideoUploadZonePro
         return;
       }
 
-      // Step 1: Create analysis & transcribe
-      const { data, error } = await supabase.functions.invoke("analyze-video", {
+      // Step 1: Transcribe video (creates analysis record)
+      const { data: transcribeData, error: transcribeError } = await supabase.functions.invoke("transcribe-video", {
         body: {
           video_url: videoUrl,
           brand_id: brandId,
         },
       });
 
-      if (error) throw error;
+      if (transcribeError) throw transcribeError;
 
-      toast.success("¡Video en análisis!");
-      onAnalysisStart(data.analysis_id);
+      const analysisId = transcribeData.analysis_id;
+      onAnalysisStart(analysisId);
+
+      // Step 2: Analyze video structure
+      const { error: analyzeError } = await supabase.functions.invoke("analyze-video", {
+        body: {
+          video_url: videoUrl,
+          brand_id: brandId,
+          analysis_id: analysisId,
+        },
+      });
+
+      if (analyzeError) throw analyzeError;
+
+      toast.success("¡Video analizado exitosamente!");
       setVideoUrl("");
     } catch (error: any) {
       console.error("Error analyzing video:", error);
@@ -96,7 +109,7 @@ export function VideoUploadZone({ brandId, onAnalysisStart }: VideoUploadZonePro
         return;
       }
 
-      // Upload to storage
+      // Step 1: Upload to storage
       const fileName = `${session.user.id}/${Date.now()}-${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from('uploaded-videos')
@@ -104,28 +117,31 @@ export function VideoUploadZone({ brandId, onAnalysisStart }: VideoUploadZonePro
 
       if (uploadError) throw uploadError;
 
-      // Start transcription
+      // Step 2: Transcribe video (creates analysis record)
       const { data: transcribeData, error: transcribeError } = await supabase.functions.invoke("transcribe-video", {
-        body: {
-          video_file_path: fileName,
-          analysis_id: '' // Will be created in analyze-video
-        },
-      });
-
-      if (transcribeError) throw transcribeError;
-
-      // Analyze video
-      const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke("analyze-video", {
         body: {
           video_file_path: fileName,
           brand_id: brandId,
         },
       });
 
+      if (transcribeError) throw transcribeError;
+
+      const analysisId = transcribeData.analysis_id;
+      onAnalysisStart(analysisId);
+
+      // Step 3: Analyze video structure
+      const { error: analyzeError } = await supabase.functions.invoke("analyze-video", {
+        body: {
+          video_file_path: fileName,
+          brand_id: brandId,
+          analysis_id: analysisId,
+        },
+      });
+
       if (analyzeError) throw analyzeError;
 
-      toast.success("¡Video subido y en análisis!");
-      onAnalysisStart(analyzeData.analysis_id);
+      toast.success("¡Video subido y analizado exitosamente!");
     } catch (error: any) {
       console.error("Error uploading video:", error);
       toast.error(error.message || "Error al subir el video");

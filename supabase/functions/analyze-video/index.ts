@@ -12,6 +12,7 @@ interface AnalyzeRequest {
   video_url?: string;
   video_file_path?: string;
   brand_id: string;
+  analysis_id?: string; // Optional: if frontend already created the record
 }
 
 serve(async (req) => {
@@ -20,7 +21,7 @@ serve(async (req) => {
   }
 
   try {
-    const { video_url, video_file_path, brand_id }: AnalyzeRequest = await req.json();
+    const { video_url, video_file_path, brand_id, analysis_id }: AnalyzeRequest = await req.json();
 
     if ((!video_url && !video_file_path) || !brand_id) {
       throw new Error("(video_url or video_file_path) and brand_id are required");
@@ -54,37 +55,53 @@ serve(async (req) => {
 
     if (brandError || !brand) throw new Error("Marca no encontrada");
 
-    // Create initial analysis record
-    const { data: analysis, error: analysisError } = await supabaseClient
-      .from("video_analyses")
-      .insert({
-        user_id: user.id,
-        brand_id: brand_id,
-        source_url: video_url || null,
-        video_file_path: video_file_path || null,
-        status: "processing",
-      })
-      .select()
-      .single();
+    // Use existing analysis record or create new one
+    let analysis;
+    if (analysis_id) {
+      // Frontend already created the record
+      const { data: existingAnalysis, error: fetchError } = await supabaseClient
+        .from("video_analyses")
+        .select("*")
+        .eq("id", analysis_id)
+        .single();
+      
+      if (fetchError) throw new Error("Registro de análisis no encontrado");
+      analysis = existingAnalysis;
+      console.log(`📝 [ANALYZE] Using existing analysis record: ${analysis.id}`);
+    } else {
+      // Create new analysis record (backward compatibility)
+      const { data: newAnalysis, error: analysisError } = await supabaseClient
+        .from("video_analyses")
+        .insert({
+          brand_id: brand_id,
+          source_url: video_url || null,
+          video_file_path: video_file_path || null,
+          status: "processing",
+        })
+        .select()
+        .single();
 
-    if (analysisError) throw analysisError;
-
-    console.log(`📝 [ANALYZE] Analysis record created: ${analysis.id}`);
+      if (analysisError) throw analysisError;
+      analysis = newAnalysis;
+      console.log(`📝 [ANALYZE] Analysis record created: ${analysis.id}`);
+    }
 
     // Check if transcription exists (from transcribe-video function)
     let transcription = analysis.transcription;
     
     if (!transcription) {
-      console.log(`⚠️ [ANALYZE] No transcription found, using mock for testing`);
-      // Fallback: Mock transcription for testing
-      transcription = `
-        ¡Hola! ¿Has estado luchando con la piel seca?
-        Yo sé cómo se siente - pruebas todo y nada funciona.
-        Pero entonces encontré esta crema natural increíble.
-        En solo 7 días, mi piel se transformó completamente.
-        ¡Mis amigos siguen preguntándome qué estoy usando!
-        No esperes - pruébala ahora y ve la diferencia.
-      `;
+      console.error(`❌ [ANALYZE] No transcription found for analysis ${analysis.id}`);
+      
+      // Update with error
+      await supabaseClient
+        .from('video_analyses')
+        .update({
+          status: 'failed',
+          error_message: 'No se encontró transcripción. Asegúrate de que transcribe-video se ejecutó primero.',
+        })
+        .eq('id', analysis.id);
+      
+      throw new Error('No transcription available. Run transcribe-video first.');
     }
 
     console.log(`🤖 [ANALYZE] Starting AI analysis...`);
