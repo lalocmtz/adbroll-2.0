@@ -360,7 +360,17 @@ export default function StudioTemplate() {
   };
 
   const handleRenderVideo = async () => {
+    console.log("🚀 [FRONTEND] handleRenderVideo called");
+    console.log("📊 [FRONTEND] Initial state:", {
+      voiceoverUrl: !!voiceoverUrl,
+      projectId,
+      numVariants,
+      assignmentsCount: assignments.length,
+      scriptsCount: scripts.length,
+    });
+
     if (!voiceoverUrl) {
+      console.error("❌ [FRONTEND] No voiceover URL available");
       toast({
         variant: "destructive",
         title: "Falta voiceover",
@@ -370,6 +380,7 @@ export default function StudioTemplate() {
     }
 
     if (!projectId) {
+      console.error("❌ [FRONTEND] No project ID available");
       toast({
         variant: "destructive",
         title: "Error",
@@ -378,18 +389,29 @@ export default function StudioTemplate() {
       return;
     }
 
+    console.log("✅ [FRONTEND] Validation passed, starting render process...");
+
     try {
       setIsRendering(true);
+      console.log("⏳ [FRONTEND] isRendering set to true");
 
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) throw new Error("No authenticated");
+      
+      console.log("👤 [FRONTEND] User fetched:", user?.id);
+      
+      if (!user) {
+        console.error("❌ [FRONTEND] No authenticated user");
+        throw new Error("No authenticated");
+      }
 
-      console.log(`Creating ${numVariants} variants...`);
+      console.log(`📝 [FRONTEND] Creating ${numVariants} variants...`);
       const createdVariants = [];
 
       for (let i = 0; i < numVariants; i++) {
+        console.log(`🔄 [FRONTEND] Creating variant ${i + 1}/${numVariants}`);
+        
         // Create variant record
         const { data: variant, error: variantError} = await supabase
           .from("variants")
@@ -402,11 +424,11 @@ export default function StudioTemplate() {
           .single();
 
         if (variantError) {
-          console.error("Error creating variant:", variantError);
+          console.error("❌ [FRONTEND] Error creating variant:", variantError);
           throw variantError;
         }
 
-        console.log("Variant created:", variant.id);
+        console.log(`✅ [FRONTEND] Variant created: ${variant.id}`);
 
         // Prepare clip assignments with scripts
         const clipAssignments = assignments.map((a: Assignment) => {
@@ -469,6 +491,8 @@ export default function StudioTemplate() {
         createdVariants.push({ ...variant, renderData });
       }
 
+      console.log(`🎉 [FRONTEND] All ${createdVariants.length} variants created and invoked`);
+      
       setGeneratedVariants(createdVariants);
       
       // Initialize progress tracking for all variants
@@ -479,16 +503,22 @@ export default function StudioTemplate() {
         message: 'En cola...',
       })));
 
+      console.log("📊 [FRONTEND] Progress tracking initialized for variants:", createdVariants.map(v => v.id));
+
       toast({
         title: `Renderizando ${numVariants} variantes`,
         description: "Sigue el progreso en tiempo real abajo",
       });
     } catch (error: any) {
-      console.error("Error rendering video:", error);
+      console.error("❌❌❌ [FRONTEND] CRITICAL ERROR in handleRenderVideo:", error);
+      console.error("❌ [FRONTEND] Error stack:", error.stack);
+      console.error("❌ [FRONTEND] Error message:", error.message);
+      console.error("❌ [FRONTEND] Full error object:", JSON.stringify(error, null, 2));
+      
       toast({
         variant: "destructive",
         title: "Error al renderizar",
-        description: error.message,
+        description: error.message || "Error desconocido al renderizar video",
       });
       setIsRendering(false);
     }
@@ -695,7 +725,15 @@ export default function StudioTemplate() {
           </p>
 
           <Button
-            onClick={handleRenderVideo}
+            onClick={() => {
+              console.log("🖱️ [FRONTEND] Render button clicked!");
+              console.log("📊 [FRONTEND] Button state:", {
+                voiceoverUrl: !!voiceoverUrl,
+                isRendering,
+                disabled: !voiceoverUrl || isRendering,
+              });
+              handleRenderVideo();
+            }}
             disabled={!voiceoverUrl || isRendering}
             size="lg"
             className="w-full"

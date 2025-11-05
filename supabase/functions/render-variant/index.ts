@@ -11,14 +11,21 @@ const SHOTSTACK_API_KEY = Deno.env.get("SHOTSTACK_API_KEY");
 const SHOTSTACK_API_URL = "https://api.shotstack.io/v1";
 
 serve(async (req) => {
+  console.log("🔵🔵🔵 [RENDER-VARIANT] ===== EDGE FUNCTION INVOKED =====");
+  console.log("🔵 [RENDER-VARIANT] Request method:", req.method);
+  console.log("🔵 [RENDER-VARIANT] Request URL:", req.url);
+  
   if (req.method === "OPTIONS") {
+    console.log("⚙️ [RENDER-VARIANT] Handling OPTIONS (CORS preflight)");
     return new Response("ok", { headers: corsHeaders });
   }
 
   let variantId: string | null = null; // Capture early for error handling
 
   try {
+    console.log("📥 [RENDER-VARIANT] Parsing request body...");
     const body = await req.json();
+    console.log("✅ [RENDER-VARIANT] Body parsed successfully");
     const { variantId: vId, clipAssignments, voiceoverUrl, scriptSections } = body;
     variantId = vId; // Store for error handling
 
