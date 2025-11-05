@@ -93,8 +93,7 @@ const Templates = () => {
   };
 
   const handleUseTemplate = (template: Template) => {
-    // Navigate to Studio with template selected
-    navigate("/studio", { state: { templateId: template.id } });
+    navigate(`/templates/use/${template.id}`);
   };
 
   const blocks = [

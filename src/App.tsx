@@ -8,6 +8,7 @@ import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Templates from "./pages/Templates";
+import TemplateUse from "./pages/TemplateUse";
 import Broll from "./pages/Broll";
 import Brands from "./pages/Brands";
 import NotFound from "./pages/NotFound";
@@ -41,6 +42,16 @@ const App = () => (
               <ProtectedRoute>
                 <Layout>
                   <Templates />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/templates/use/:templateId"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <TemplateUse />
                 </Layout>
               </ProtectedRoute>
             }
