@@ -367,7 +367,7 @@ export default function StudioTemplate() {
       try {
         const { data: variant, error } = await supabase
           .from("variants")
-          .select("status, metadata_json, error_message")
+          .select("status, metadata_json, error_message, video_url, srt_url")
           .eq("id", variantId)
           .single();
 
@@ -376,7 +376,7 @@ export default function StudioTemplate() {
           return;
         }
 
-        console.log(`🔄 [POLLING] Variant ${variantId} - Status: ${variant?.status}`);
+        console.log(`🔄 [POLLING] Variant ${variantId} - Status: ${variant?.status}, Video URL: ${variant?.video_url || 'N/A'}`);
 
         // Update progress if available
         if (variant?.metadata_json) {
@@ -397,6 +397,26 @@ export default function StudioTemplate() {
                   : v
               )
             );
+          }
+        }
+
+        // Generate signed URL when video is ready
+        if (variant?.status === "completed" && variant.video_url) {
+          console.log(`🔗 [POLLING] Generating signed URL for video: ${variant.video_url}`);
+          
+          const { data: signedData, error: signError } = await supabase.storage
+            .from("renders")
+            .createSignedUrl(variant.video_url, 3600);
+
+          if (signError) {
+            console.error("❌ [POLLING] Error creating signed URL:", signError);
+          } else if (signedData?.signedUrl) {
+            console.log(`✅ [POLLING] Signed URL created successfully for variant ${variantId}`);
+            setVariantSignedUrls(prev => {
+              const newMap = new Map(prev);
+              newMap.set(variantId, signedData.signedUrl);
+              return newMap;
+            });
           }
         }
 
