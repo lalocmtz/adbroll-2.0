@@ -140,7 +140,7 @@ serve(async (req) => {
           style: "minimal",
           color: "#ffffff",
           size: "medium",
-          background: "rgba(0,0,0,0.5)",
+          background: "#000000",
           position: "bottom",
         },
         start: startTime,
