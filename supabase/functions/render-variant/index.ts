@@ -39,74 +39,173 @@ serve(async (req) => {
     // Generate SRT file from script sections
     const srtContent = generateSRT(scriptSections);
 
-    // For MVP: Create a placeholder render using the first clip
-    // In production, this would use FFmpeg to properly render everything
-    
-    const renderMetadata = {
-      clips: clipAssignments,
-      voiceover_url: voiceoverUrl,
-      srt_content: srtContent,
-      render_instructions: {
-        resolution: "1080x1920", // TikTok/Reels format
-        fps: 30,
-        codec: "libx264",
-        audio_codec: "aac",
-        subtitle_style: {
-          font: "Inter",
-          size: 24,
-          color: "&HFFFFFF",
-          outline: 2,
-          shadow: 0,
-          alignment: 2,
-          margin_v: 50,
-        },
-      },
-      rendered_at: new Date().toISOString(),
-    };
+    // Create temporary directory for processing
+    const tempDir = await Deno.makeTempDir();
+    console.log("Temp directory created:", tempDir);
 
-    // Store paths
-    const videoPath = `${variantId}/video.mp4`;
-    const srtPath = `${variantId}/subtitles.srt`;
-
-    // Create placeholder video by copying the first assigned clip
-    if (clipAssignments && clipAssignments.length > 0) {
-      const firstClip = clipAssignments[0];
+    try {
+      // Step 1: Download all clips
+      console.log("Downloading clips...");
+      const clipPaths: string[] = [];
       
-      if (firstClip.clipUrl) {
+      for (let i = 0; i < clipAssignments.length; i++) {
+        const clip = clipAssignments[i];
+        if (!clip.clipUrl) {
+          console.warn(`Clip ${i} has no URL, skipping`);
+          continue;
+        }
+
+        const { data: clipData, error: downloadError } = await supabase.storage
+          .from("broll")
+          .download(clip.clipUrl);
+
+        if (downloadError || !clipData) {
+          console.error(`Error downloading clip ${i}:`, downloadError);
+          continue;
+        }
+
+        const clipPath = `${tempDir}/clip_${i}.mp4`;
+        await Deno.writeFile(clipPath, new Uint8Array(await clipData.arrayBuffer()));
+        clipPaths.push(clipPath);
+        console.log(`Downloaded clip ${i} to ${clipPath}`);
+      }
+
+      if (clipPaths.length === 0) {
+        throw new Error("No clips were successfully downloaded");
+      }
+
+      // Step 2: Download voiceover if available
+      let voiceoverPath: string | null = null;
+      if (voiceoverUrl) {
+        console.log("Downloading voiceover...");
         try {
-          // Download the first clip from broll bucket
-          const { data: clipData, error: downloadError } = await supabase.storage
-            .from("broll")
-            .download(firstClip.clipUrl);
-
-          if (downloadError) {
-            console.error("Error downloading clip:", downloadError);
-          } else if (clipData) {
-            // Upload to renders bucket as the output video
-            const { error: uploadError } = await supabase.storage
-              .from("renders")
-              .upload(videoPath, clipData, {
-                contentType: "video/mp4",
-                upsert: true,
-              });
-
-            if (uploadError) {
-              console.error("Error uploading placeholder video:", uploadError);
-            } else {
-              console.log("Placeholder video created successfully");
-            }
+          const voiceResponse = await fetch(voiceoverUrl);
+          if (voiceResponse.ok) {
+            const voiceData = await voiceResponse.arrayBuffer();
+            voiceoverPath = `${tempDir}/voiceover.mp3`;
+            await Deno.writeFile(voiceoverPath, new Uint8Array(voiceData));
+            console.log("Voiceover downloaded to", voiceoverPath);
           }
         } catch (err) {
-          console.error("Error creating placeholder video:", err);
+          console.error("Error downloading voiceover:", err);
         }
       }
-    }
 
-    // Upload SRT file to renders bucket
-    try {
+      // Step 3: Save SRT file
+      const srtPath = `${tempDir}/subtitles.srt`;
+      await Deno.writeTextFile(srtPath, srtContent);
+      console.log("SRT file saved to", srtPath);
+
+      // Step 4: Create concat file for FFmpeg
+      const concatFilePath = `${tempDir}/concat.txt`;
+      const concatContent = clipPaths.map(path => `file '${path}'`).join('\n');
+      await Deno.writeTextFile(concatFilePath, concatContent);
+      console.log("Concat file created");
+
+      // Step 5: Run FFmpeg to concatenate clips
+      const concatenatedPath = `${tempDir}/concatenated.mp4`;
+      console.log("Concatenating clips with FFmpeg...");
+      
+      const concatProcess = new Deno.Command("ffmpeg", {
+        args: [
+          "-f", "concat",
+          "-safe", "0",
+          "-i", concatFilePath,
+          "-c", "copy",
+          concatenatedPath
+        ],
+        stdout: "piped",
+        stderr: "piped",
+      });
+
+      const concatResult = await concatProcess.output();
+      if (!concatResult.success) {
+        const error = new TextDecoder().decode(concatResult.stderr);
+        console.error("FFmpeg concat error:", error);
+        throw new Error("Failed to concatenate clips");
+      }
+      console.log("Clips concatenated successfully");
+
+      // Step 6: Add voiceover if available
+      let videoWithAudioPath = concatenatedPath;
+      if (voiceoverPath) {
+        console.log("Adding voiceover to video...");
+        videoWithAudioPath = `${tempDir}/with_audio.mp4`;
+        
+        const audioProcess = new Deno.Command("ffmpeg", {
+          args: [
+            "-i", concatenatedPath,
+            "-i", voiceoverPath,
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-map", "0:v:0",
+            "-map", "1:a:0",
+            "-shortest",
+            videoWithAudioPath
+          ],
+          stdout: "piped",
+          stderr: "piped",
+        });
+
+        const audioResult = await audioProcess.output();
+        if (!audioResult.success) {
+          const error = new TextDecoder().decode(audioResult.stderr);
+          console.error("FFmpeg audio overlay error:", error);
+          // Continue without audio if it fails
+          videoWithAudioPath = concatenatedPath;
+        } else {
+          console.log("Voiceover added successfully");
+        }
+      }
+
+      // Step 7: Burn subtitles into video
+      const finalVideoPath = `${tempDir}/final.mp4`;
+      console.log("Burning subtitles...");
+      
+      const subtitleProcess = new Deno.Command("ffmpeg", {
+        args: [
+          "-i", videoWithAudioPath,
+          "-vf", `subtitles=${srtPath}:force_style='FontName=Inter,FontSize=24,PrimaryColour=&HFFFFFF,OutlineColour=&H000000,Outline=2,Shadow=0,Alignment=2,MarginV=50'`,
+          "-c:a", "copy",
+          "-preset", "fast",
+          "-crf", "23",
+          finalVideoPath
+        ],
+        stdout: "piped",
+        stderr: "piped",
+      });
+
+      const subtitleResult = await subtitleProcess.output();
+      if (!subtitleResult.success) {
+        const error = new TextDecoder().decode(subtitleResult.stderr);
+        console.error("FFmpeg subtitle error:", error);
+        throw new Error("Failed to burn subtitles");
+      }
+      console.log("Subtitles burned successfully");
+
+      // Step 8: Upload final video to renders bucket
+      console.log("Uploading final video...");
+      const finalVideoData = await Deno.readFile(finalVideoPath);
+      const videoPath = `${variantId}/video.mp4`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from("renders")
+        .upload(videoPath, finalVideoData, {
+          contentType: "video/mp4",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error("Error uploading video:", uploadError);
+        throw uploadError;
+      }
+      console.log("Video uploaded successfully");
+
+      // Step 9: Upload SRT file
+      const srtStoragePath = `${variantId}/subtitles.srt`;
       const { error: srtUploadError } = await supabase.storage
         .from("renders")
-        .upload(srtPath, srtContent, {
+        .upload(srtStoragePath, srtContent, {
           contentType: "text/plain",
           upsert: true,
         });
@@ -114,65 +213,78 @@ serve(async (req) => {
       if (srtUploadError) {
         console.error("Error uploading SRT:", srtUploadError);
       }
-    } catch (err) {
-      console.error("Error uploading SRT file:", err);
+
+      // Create metadata
+      const renderMetadata = {
+        clips_count: clipPaths.length,
+        has_voiceover: !!voiceoverPath,
+        has_subtitles: true,
+        resolution: "1080x1920",
+        fps: 30,
+        codec: "libx264",
+        audio_codec: "aac",
+        rendered_at: new Date().toISOString(),
+      };
+
+      // Update variant with results
+      const { error: updateError } = await supabase
+        .from("variants")
+        .update({
+          status: "completed",
+          video_url: videoPath,
+          srt_url: srtStoragePath,
+          metadata_json: renderMetadata,
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", variantId);
+
+      if (updateError) throw updateError;
+
+      console.log("Render completed for variant:", variantId);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          variantId,
+          videoPath,
+          srtPath: srtStoragePath,
+          metadata: renderMetadata,
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+
+    } finally {
+      // Cleanup temp directory
+      try {
+        await Deno.remove(tempDir, { recursive: true });
+        console.log("Temp directory cleaned up");
+      } catch (err) {
+        console.error("Error cleaning up temp directory:", err);
+      }
     }
 
-    // Simulate rendering delay
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // Update variant with results
-    const { error: updateError } = await supabase
-      .from("variants")
-      .update({
-        status: "completed",
-        video_url: videoPath, // Store path, not full URL
-        srt_url: srtPath,
-        metadata_json: renderMetadata,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", variantId);
-
-    if (updateError) throw updateError;
-
-    console.log("Render completed for variant:", variantId);
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        variantId,
-        videoPath,
-        srtPath,
-        srtContent,
-        metadata: renderMetadata,
-        note: "This is a placeholder implementation. Production version will use FFmpeg for actual video rendering.",
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
   } catch (error) {
     console.error("Error in render-variant:", error);
 
     // Update variant status to error
-    if (req.url) {
-      try {
-        const { variantId } = await req.json();
-        const supabase = createClient(
-          Deno.env.get("SUPABASE_URL") ?? "",
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-        );
+    try {
+      const { variantId } = await req.json();
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      );
 
-        await supabase
-          .from("variants")
-          .update({
-            status: "failed",
-            error_message: (error as Error).message,
-          })
-          .eq("id", variantId);
-      } catch (e) {
-        console.error("Failed to update variant error status:", e);
-      }
+      await supabase
+        .from("variants")
+        .update({
+          status: "failed",
+          error_message: (error as Error).message,
+        })
+        .eq("id", variantId);
+    } catch (e) {
+      console.error("Failed to update variant error status:", e);
     }
 
     return new Response(
@@ -191,7 +303,7 @@ function generateSRT(sections: any[]): string {
   let currentTime = 0;
 
   for (const section of sections) {
-    const duration = section.duration || 3; // Default 3 seconds per section
+    const duration = section.duration || 3;
     const startTime = formatSRTTime(currentTime);
     const endTime = formatSRTTime(currentTime + duration);
 
