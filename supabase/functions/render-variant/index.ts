@@ -7,6 +7,9 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+const SHOTSTACK_API_KEY = Deno.env.get("SHOTSTACK_API_KEY");
+const SHOTSTACK_API_URL = "https://api.shotstack.io/v1";
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -22,7 +25,11 @@ serve(async (req) => {
       );
     }
 
-    console.log("Starting render for variant:", variantId);
+    if (!SHOTSTACK_API_KEY) {
+      throw new Error("SHOTSTACK_API_KEY is not configured");
+    }
+
+    console.log("Starting Shotstack render for variant:", variantId);
 
     // Initialize Supabase
     const supabase = createClient(
@@ -36,97 +43,240 @@ serve(async (req) => {
       .update({ status: "rendering" })
       .eq("id", variantId);
 
-    // Generate SRT file from script sections
+    // Generate SRT content
     const srtContent = generateSRT(scriptSections);
 
-    // NOTE: Supabase Edge Functions DO NOT support spawning subprocesses (FFmpeg)
-    // For production video rendering, you need to use:
-    // 1. External service (RunPod, Replicate, Modal, etc.)
-    // 2. FFmpeg.wasm (WebAssembly version, slower but works in edge functions)
-    // 3. Video API service (Shotstack, Mux, Cloudinary)
+    // Step 1: Get signed URLs for all clips
+    console.log("Getting signed URLs for clips...");
+    const clipUrls: string[] = [];
     
-    // For now: Create placeholder by copying first clip
-    const renderMetadata = {
-      clips: clipAssignments,
-      voiceover_url: voiceoverUrl,
-      srt_content: srtContent,
-      render_instructions: {
-        resolution: "1080x1920",
-        fps: 30,
-        codec: "libx264",
-        audio_codec: "aac",
-        subtitle_style: {
-          font: "Inter",
-          size: 24,
-          color: "&HFFFFFF",
-          outline: 2,
-          shadow: 0,
-          alignment: 2,
-          margin_v: 50,
+    for (const clip of clipAssignments) {
+      if (!clip.clipUrl) continue;
+
+      const { data: signedData, error: signError } = await supabase.storage
+        .from("broll")
+        .createSignedUrl(clip.clipUrl, 3600); // 1 hour validity
+
+      if (!signError && signedData?.signedUrl) {
+        clipUrls.push(signedData.signedUrl);
+        console.log("Got signed URL for clip:", clip.clipUrl);
+      }
+    }
+
+    if (clipUrls.length === 0) {
+      throw new Error("No valid clip URLs found");
+    }
+
+    // Step 2: Build Shotstack timeline
+    console.log("Building Shotstack timeline...");
+    
+    // Create video clips for timeline
+    const videoClips = clipUrls.map((url, index) => {
+      const section = clipAssignments[index];
+      const duration = section?.duration || 3;
+
+      return {
+        asset: {
+          type: "video",
+          src: url,
+          trim: duration, // Trim to expected duration
         },
+        start: index === 0 ? 0 : clipAssignments
+          .slice(0, index)
+          .reduce((sum: number, s: any) => sum + (s.duration || 3), 0),
+        length: duration,
+      };
+    });
+
+    // Add voiceover track if available
+    const tracks: any[] = [
+      {
+        clips: videoClips,
       },
-      rendered_at: new Date().toISOString(),
-      note: "Placeholder render - production needs external FFmpeg service",
+    ];
+
+    if (voiceoverUrl) {
+      console.log("Adding voiceover track...");
+      tracks.push({
+        clips: [
+          {
+            asset: {
+              type: "audio",
+              src: voiceoverUrl,
+            },
+            start: 0,
+            length: videoClips.reduce((sum, clip) => sum + clip.length, 0),
+          },
+        ],
+      });
+    }
+
+    // Add subtitle track
+    console.log("Adding subtitles...");
+    const subtitleClips = scriptSections.map((section: any, index: number) => {
+      const startTime = index === 0 ? 0 : scriptSections
+        .slice(0, index)
+        .reduce((sum: number, s: any) => sum + (s.duration || 3), 0);
+
+      return {
+        asset: {
+          type: "title",
+          text: section.text,
+          style: "minimal",
+          color: "#ffffff",
+          size: "medium",
+          background: "rgba(0,0,0,0.5)",
+          position: "bottom",
+        },
+        start: startTime,
+        length: section.duration || 3,
+      };
+    });
+
+    tracks.push({
+      clips: subtitleClips,
+    });
+
+    // Build final Shotstack edit
+    const shotstackEdit = {
+      timeline: {
+        background: "#000000",
+        tracks: tracks,
+      },
+      output: {
+        format: "mp4",
+        resolution: "hd",
+        aspectRatio: "9:16", // Vertical for TikTok/Reels
+        size: {
+          width: 1080,
+          height: 1920,
+        },
+        fps: 30,
+        scaleTo: "crop",
+      },
     };
 
-    // Store paths
+    console.log("Shotstack edit payload:", JSON.stringify(shotstackEdit, null, 2));
+
+    // Step 3: Submit render to Shotstack
+    console.log("Submitting render to Shotstack...");
+    const renderResponse = await fetch(`${SHOTSTACK_API_URL}/render`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": SHOTSTACK_API_KEY,
+      },
+      body: JSON.stringify(shotstackEdit),
+    });
+
+    if (!renderResponse.ok) {
+      const errorText = await renderResponse.text();
+      console.error("Shotstack API error:", errorText);
+      throw new Error(`Shotstack API error: ${errorText}`);
+    }
+
+    const renderData = await renderResponse.json();
+    console.log("Shotstack render submitted:", renderData);
+
+    const renderId = renderData.response?.id;
+    if (!renderId) {
+      throw new Error("No render ID received from Shotstack");
+    }
+
+    // Step 4: Poll for render completion
+    console.log("Polling for render completion...");
+    let renderStatus = "queued";
+    let renderUrl = null;
+    let attempts = 0;
+    const maxAttempts = 60; // 5 minutes max (5s intervals)
+
+    while (renderStatus !== "done" && attempts < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait 5 seconds
+
+      const statusResponse = await fetch(
+        `${SHOTSTACK_API_URL}/render/${renderId}`,
+        {
+          headers: {
+            "x-api-key": SHOTSTACK_API_KEY,
+          },
+        }
+      );
+
+      if (!statusResponse.ok) {
+        console.error("Error checking render status");
+        break;
+      }
+
+      const statusData = await statusResponse.json();
+      renderStatus = statusData.response?.status;
+      renderUrl = statusData.response?.url;
+
+      console.log(`Render status: ${renderStatus} (attempt ${attempts + 1}/${maxAttempts})`);
+
+      if (renderStatus === "failed") {
+        throw new Error("Shotstack render failed");
+      }
+
+      attempts++;
+    }
+
+    if (renderStatus !== "done" || !renderUrl) {
+      throw new Error("Render timeout or failed to complete");
+    }
+
+    console.log("Render completed, downloading from:", renderUrl);
+
+    // Step 5: Download rendered video from Shotstack
+    const videoResponse = await fetch(renderUrl);
+    if (!videoResponse.ok) {
+      throw new Error("Failed to download rendered video");
+    }
+
+    const videoBlob = await videoResponse.arrayBuffer();
+    console.log("Video downloaded, size:", videoBlob.byteLength);
+
+    // Step 6: Upload to Supabase storage
     const videoPath = `${variantId}/video.mp4`;
     const srtPath = `${variantId}/subtitles.srt`;
 
-    // Create placeholder video by copying the first assigned clip
-    if (clipAssignments && clipAssignments.length > 0) {
-      const firstClip = clipAssignments[0];
-      
-      if (firstClip.clipUrl) {
-        try {
-          // Download the first clip from broll bucket
-          const { data: clipData, error: downloadError } = await supabase.storage
-            .from("broll")
-            .download(firstClip.clipUrl);
+    console.log("Uploading to Supabase storage...");
+    
+    const { error: videoUploadError } = await supabase.storage
+      .from("renders")
+      .upload(videoPath, videoBlob, {
+        contentType: "video/mp4",
+        upsert: true,
+      });
 
-          if (downloadError) {
-            console.error("Error downloading clip:", downloadError);
-          } else if (clipData) {
-            // Upload to renders bucket as the output video
-            const { error: uploadError } = await supabase.storage
-              .from("renders")
-              .upload(videoPath, clipData, {
-                contentType: "video/mp4",
-                upsert: true,
-              });
-
-            if (uploadError) {
-              console.error("Error uploading placeholder video:", uploadError);
-            } else {
-              console.log("Placeholder video created successfully");
-            }
-          }
-        } catch (err) {
-          console.error("Error creating placeholder video:", err);
-        }
-      }
+    if (videoUploadError) {
+      console.error("Error uploading video:", videoUploadError);
+      throw videoUploadError;
     }
 
-    // Upload SRT file to renders bucket
-    try {
-      const { error: srtUploadError } = await supabase.storage
-        .from("renders")
-        .upload(srtPath, srtContent, {
-          contentType: "text/plain",
-          upsert: true,
-        });
+    // Upload SRT file
+    const { error: srtUploadError } = await supabase.storage
+      .from("renders")
+      .upload(srtPath, srtContent, {
+        contentType: "text/plain",
+        upsert: true,
+      });
 
-      if (srtUploadError) {
-        console.error("Error uploading SRT:", srtUploadError);
-      }
-    } catch (err) {
-      console.error("Error uploading SRT file:", err);
+    if (srtUploadError) {
+      console.error("Error uploading SRT:", srtUploadError);
     }
 
-    // Simulate rendering delay
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    // Step 7: Update variant status
+    const renderMetadata = {
+      shotstack_render_id: renderId,
+      clips_count: clipUrls.length,
+      has_voiceover: !!voiceoverUrl,
+      has_subtitles: true,
+      resolution: "1080x1920",
+      fps: 30,
+      rendered_with: "Shotstack API",
+      rendered_at: new Date().toISOString(),
+    };
 
-    // Update variant with results
     const { error: updateError } = await supabase
       .from("variants")
       .update({
@@ -140,7 +290,7 @@ serve(async (req) => {
 
     if (updateError) throw updateError;
 
-    console.log("Render completed for variant:", variantId);
+    console.log("Render completed successfully for variant:", variantId);
 
     return new Response(
       JSON.stringify({
@@ -148,9 +298,8 @@ serve(async (req) => {
         variantId,
         videoPath,
         srtPath,
-        srtContent,
+        shotstackRenderId: renderId,
         metadata: renderMetadata,
-        note: "Placeholder implementation. For production FFmpeg rendering, integrate with external service like RunPod, Replicate, or Shotstack API.",
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -163,7 +312,7 @@ serve(async (req) => {
     try {
       const body = await req.clone().json();
       const { variantId } = body;
-      
+
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL") ?? "",
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
