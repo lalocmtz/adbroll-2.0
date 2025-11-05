@@ -502,28 +502,62 @@ export default function StudioTemplate() {
         <VariantCountSelector count={numVariants} onChange={setNumVariants} />
       </Card>
 
-      {numVariants > 1 && (
+      {numVariants === 3 && (
         <Card className="p-6">
-          <VariationTypeSelector type={variationType} onChange={setVariationType} />
-        </Card>
-      )}
-
-      {numVariants > 1 && (
-        <Card className="p-6">
-          <HookSelector
-            brandId={brandId}
-            numVariants={numVariants}
-            hooks={hookConfigs}
-            onChange={setHookConfigs}
+          <VariationTypeSelector 
+            type={variationType} 
+            onChange={(newType) => {
+              setVariationType(newType);
+              // Clear previous configurations when switching
+              setHookConfigs([]);
+            }} 
           />
         </Card>
       )}
 
-      {numVariants > 1 && hookConfigs.length > 0 && hookConfigs[0].clipId && (
-        <HookPreview
-          clipId={hookConfigs[0].clipId}
-          headlineStyle={hookConfigs[0].headlineStyle}
-        />
+      {/* Hook Variation Section */}
+      {numVariants === 3 && variationType === "hook" && brandId && (
+        <Card className="p-6">
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-medium mb-1">Tus hooks para esta campaña 🎯</p>
+              <p className="text-xs text-muted-foreground">
+                Esto es lo que verá tu cliente en los primeros 3 segundos
+              </p>
+            </div>
+            <HookSelector
+              brandId={brandId}
+              numVariants={numVariants}
+              hooks={hookConfigs}
+              onChange={setHookConfigs}
+            />
+          </div>
+        </Card>
+      )}
+
+      {/* Full Script Variation Section */}
+      {numVariants === 3 && variationType === "full" && (
+        <Card className="p-6">
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-medium mb-1">Tus guiones para esta campaña ✨</p>
+              <p className="text-xs text-muted-foreground">
+                Cada variante tendrá un guión único y optimizado
+              </p>
+            </div>
+            <Card className="p-6 border-dashed bg-muted/30">
+              <div className="text-center space-y-2">
+                <Sparkles className="w-8 h-8 text-primary/50 mx-auto" />
+                <p className="text-sm text-muted-foreground">
+                  Los guiones se generarán automáticamente al renderizar las variantes
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Cada uno estará optimizado para diferentes ángulos creativos
+                </p>
+              </div>
+            </Card>
+          </div>
+        </Card>
       )}
 
       {/* Video Preview */}

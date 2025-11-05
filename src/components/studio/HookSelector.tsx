@@ -88,91 +88,91 @@ export function HookSelector({ brandId, numVariants, hooks, onChange }: HookSele
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <Label className="text-base font-semibold">Ganchos visuales y titulares</Label>
-        <p className="text-sm text-muted-foreground mt-1">
-          Selecciona el clip y estilo de headline para cada variante
-        </p>
-      </div>
+    <div className="grid gap-3">
+      {Array.from({ length: numVariants }, (_, i) => i).map((variantIndex) => {
+        const hook = hooks.find((h) => h.variantIndex === variantIndex);
+        const selectedClip = hookClips.find((c) => c.id === hook?.clipId);
 
-      <div className="grid gap-4">
-        {Array.from({ length: numVariants }, (_, i) => i).map((variantIndex) => {
-          const hook = hooks.find((h) => h.variantIndex === variantIndex);
-          const selectedClip = hookClips.find((c) => c.id === hook?.clipId);
+        return (
+          <Card 
+            key={variantIndex} 
+            className={`p-4 transition-all ${
+              variantIndex === 0 
+                ? "border-primary/40 bg-primary/5" 
+                : "hover:border-primary/30"
+            }`}
+          >
+            <div className="flex items-start gap-4">
+              {/* Variant Badge */}
+              <Badge variant={variantIndex === 0 ? "default" : "outline"} className="shrink-0 mt-1">
+                {variantIndex === 0 ? "Principal" : `Hook ${variantIndex + 1}`}
+              </Badge>
 
-          return (
-            <Card key={variantIndex} className="p-4">
-              <div className="flex items-start gap-4">
-                {/* Variant Badge */}
-                <Badge className="shrink-0 mt-1">V{variantIndex + 1}</Badge>
+              {/* Thumbnail Preview */}
+              <div className="w-20 h-20 bg-muted rounded-lg overflow-hidden shrink-0 border">
+                {selectedClip && signedUrls.get(selectedClip.id) ? (
+                  <video
+                    src={signedUrls.get(selectedClip.id)}
+                    className="w-full h-full object-cover"
+                    muted
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+                    {variantIndex === 0 ? "Actual" : "Añadir"}
+                  </div>
+                )}
+              </div>
 
-                {/* Thumbnail Preview */}
-                <div className="w-24 h-24 bg-muted rounded-lg overflow-hidden shrink-0">
-                  {selectedClip && signedUrls.get(selectedClip.id) ? (
-                    <video
-                      src={signedUrls.get(selectedClip.id)}
-                      className="w-full h-full object-cover"
-                      muted
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
-                      Sin clip
-                    </div>
-                  )}
+              {/* Selectors */}
+              <div className="flex-1 space-y-2.5">
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">
+                    Clip de hook
+                  </Label>
+                  <Select
+                    value={hook?.clipId || ""}
+                    onValueChange={(value) => updateHook(variantIndex, "clipId", value)}
+                  >
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Seleccionar clip de hooks" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {hookClips.map((clip) => (
+                        <SelectItem key={clip.id} value={clip.id}>
+                          {clip.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                {/* Selectors */}
-                <div className="flex-1 space-y-3">
-                  <div>
-                    <Label className="text-xs text-muted-foreground mb-1.5 block">
-                      Clip de hook
-                    </Label>
-                    <Select
-                      value={hook?.clipId || ""}
-                      onValueChange={(value) => updateHook(variantIndex, "clipId", value)}
-                    >
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Seleccionar clip" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {hookClips.map((clip) => (
-                          <SelectItem key={clip.id} value={clip.id}>
-                            {clip.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label className="text-xs text-muted-foreground mb-1.5 block">
-                      Estilo de headline
-                    </Label>
-                    <Select
-                      value={hook?.headlineStyle || "text-over-black"}
-                      onValueChange={(value) => updateHook(variantIndex, "headlineStyle", value)}
-                    >
-                      <SelectTrigger className="h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="text-over-black">
-                          Texto orgánico en fondo negro
-                        </SelectItem>
-                        <SelectItem value="text-over-video">
-                          Texto blanco sobre video
-                        </SelectItem>
-                        <SelectItem value="none">Sin texto</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">
+                    Estilo de headline
+                  </Label>
+                  <Select
+                    value={hook?.headlineStyle || "text-over-black"}
+                    onValueChange={(value) => updateHook(variantIndex, "headlineStyle", value)}
+                  >
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="text-over-black">
+                        Fondo negro
+                      </SelectItem>
+                      <SelectItem value="text-over-video">
+                        Sobre video
+                      </SelectItem>
+                      <SelectItem value="none">Sin texto</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-            </Card>
-          );
-        })}
-      </div>
+            </div>
+          </Card>
+        );
+      })}
     </div>
   );
 }
