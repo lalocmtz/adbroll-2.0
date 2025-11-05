@@ -12,10 +12,14 @@ import {
   Sparkles, 
   ThumbsUp, 
   ThumbsDown,
-  Wand2
+  Wand2,
+  Save,
+  Copy,
+  PlayCircle
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { useSignedUrl } from "@/hooks/useSignedUrl";
 
 interface Section {
   section: string;
@@ -46,6 +50,7 @@ const purposeLabels: Record<string, string> = {
 export function VideoAnalysisResult({ analysisId, onAdaptToBrand }: VideoAnalysisResultProps) {
   const [feedback, setFeedback] = useState<string>("");
   const [rating, setRating] = useState<number | null>(null);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
 
   const { data: analysis, isLoading } = useQuery({
     queryKey: ["video-analysis", analysisId],
@@ -64,6 +69,69 @@ export function VideoAnalysisResult({ analysisId, onAdaptToBrand }: VideoAnalysi
       return query.state.data?.status === "processing" ? 3000 : false;
     },
   });
+
+  // Get signed URL for thumbnail or video
+  const { signedUrl: thumbnailUrl } = useSignedUrl(
+    analysis?.thumbnail_url || analysis?.video_file_path,
+    analysis?.thumbnail_url ? "thumbnails" : "uploaded-videos"
+  );
+
+  const handleSaveAsTemplate = async () => {
+    // Type assertion to handle Json type from Supabase
+    const structure = analysis?.structure as any;
+    
+    if (!structure?.sections) {
+      toast.error("No hay secciones para guardar");
+      return;
+    }
+
+    setIsSavingTemplate(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("No autenticado");
+
+      const sections = structure.sections || [];
+
+      // Create template
+      const { data: template, error: templateError } = await supabase
+        .from("templates")
+        .insert({
+          user_id: user.id,
+          name: `Template del análisis ${new Date().toLocaleDateString()}`,
+          description: `Plantilla generada automáticamente desde análisis de video`,
+          use_case: "Estructura narrativa analizada",
+          is_public: false,
+        })
+        .select()
+        .single();
+
+      if (templateError) throw templateError;
+
+      // Create template sections
+      const templateSections = sections.map((section: any, index: number) => ({
+        template_id: template.id,
+        title: section.section,
+        type: section.purpose,
+        text_prompt: section.summary,
+        description: section.explanation,
+        expected_duration: 3,
+        order_index: index,
+      }));
+
+      const { error: sectionsError } = await supabase
+        .from("template_sections")
+        .insert(templateSections);
+
+      if (sectionsError) throw sectionsError;
+
+      toast.success("¡Plantilla guardada exitosamente!");
+    } catch (error: any) {
+      console.error("Error saving template:", error);
+      toast.error(`Error al guardar plantilla: ${error.message}`);
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  };
 
   const handleSubmitFeedback = async () => {
     if (!rating) {
@@ -121,18 +189,61 @@ export function VideoAnalysisResult({ analysisId, onAdaptToBrand }: VideoAnalysi
   const structure = analysis.structure as { sections?: Section[]; overall_narrative_score?: number; key_insights?: string[] };
   const sections = structure?.sections || [];
   const narrativeScore = (structure?.overall_narrative_score || 0) * 100;
+  const transcription = analysis.transcription || "";
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header with Video Preview */}
       <Card className="p-6">
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Video Preview */}
+          <div className="space-y-3">
+            <div className="aspect-video bg-muted rounded-lg overflow-hidden relative group">
+              {thumbnailUrl ? (
+                <>
+                  <img 
+                    src={thumbnailUrl} 
+                    alt="Video thumbnail"
+                    className="w-full h-full object-cover"
+                  />
+                  {analysis.source_url && (
+                    <a 
+                      href={analysis.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <PlayCircle className="w-16 h-16 text-white" />
+                    </a>
+                  )}
+                </>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <PlayCircle className="w-16 h-16 text-muted-foreground/30" />
+                </div>
+              )}
+            </div>
+            {analysis.source_url && (
+              <a 
+                href={analysis.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary hover:underline flex items-center gap-1"
+              >
+                <PlayCircle className="w-3 h-3" />
+                Ver video original
+              </a>
+            )}
+          </div>
+
+          {/* Analysis Summary */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
               <CheckCircle2 className="w-6 h-6 text-green-500" />
               <h3 className="text-2xl font-bold">Análisis Completado</h3>
             </div>
-            <p className="text-muted-foreground mb-4">
+            
+            <p className="text-muted-foreground">
               Detectamos {sections.length} secciones narrativas en tu video
             </p>
             
@@ -144,14 +255,49 @@ export function VideoAnalysisResult({ analysisId, onAdaptToBrand }: VideoAnalysi
               </div>
               <Progress value={narrativeScore} className="h-2" />
             </div>
-          </div>
 
-          <Button onClick={onAdaptToBrand} size="lg" className="ml-4">
-            <Wand2 className="w-4 h-4 mr-2" />
-            Adaptar a mi Marca
-          </Button>
+            {/* Action Buttons */}
+            <div className="flex flex-col gap-2 pt-4">
+              <Button onClick={onAdaptToBrand} size="lg" className="w-full">
+                <Wand2 className="w-4 h-4 mr-2" />
+                Adaptar a mi Marca
+              </Button>
+              <Button 
+                onClick={handleSaveAsTemplate}
+                disabled={isSavingTemplate}
+                variant="outline" 
+                size="lg" 
+                className="w-full"
+              >
+                {isSavingTemplate ? (
+                  <>
+                    <Clock className="w-4 h-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Guardar como Plantilla
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
       </Card>
+
+      {/* Full Transcription */}
+      {transcription && (
+        <Card className="p-6">
+          <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
+            <Copy className="w-5 h-5" />
+            Transcripción Completa
+          </h4>
+          <div className="bg-muted rounded-lg p-4 text-sm">
+            <p className="whitespace-pre-wrap">{transcription}</p>
+          </div>
+        </Card>
+      )}
 
       {/* Sections Timeline */}
       <Card className="p-6">
