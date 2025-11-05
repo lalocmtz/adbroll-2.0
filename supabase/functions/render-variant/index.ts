@@ -74,16 +74,17 @@ serve(async (req) => {
     // Simulate rendering delay
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    // Generate placeholder video URL (in production, this would be the actual rendered video)
-    const placeholderVideoUrl = `https://ayvlvkwixkkjkysgeetj.supabase.co/storage/v1/object/public/renders/${variantId}/video.mp4`;
+    // Store the video path (not public URL - we'll use signed URLs)
+    const videoPath = `${variantId}/video.mp4`;
+    const srtPath = `${variantId}/subtitles.srt`;
 
     // Update variant with results
     const { error: updateError } = await supabase
       .from("variants")
       .update({
         status: "completed",
-        video_url: placeholderVideoUrl,
-        srt_url: `${variantId}/subtitles.srt`,
+        video_url: videoPath, // Store path, not full URL
+        srt_url: srtPath,
         metadata_json: renderMetadata,
         completed_at: new Date().toISOString(),
       })
@@ -97,7 +98,8 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         variantId,
-        videoUrl: placeholderVideoUrl,
+        videoPath,
+        srtPath,
         srtContent,
         metadata: renderMetadata,
         note: "This is a placeholder implementation. Production version will use FFmpeg for actual video rendering.",

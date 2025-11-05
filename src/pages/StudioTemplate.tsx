@@ -50,6 +50,7 @@ export default function StudioTemplate() {
 
   const [isRendering, setIsRendering] = useState(false);
   const [generatedVariants, setGeneratedVariants] = useState<any[]>([]);
+  const [variantSignedUrls, setVariantSignedUrls] = useState<Map<string, string>>(new Map());
   const [numVariants, setNumVariants] = useState(3);
   const [varyHookVisual, setVaryHookVisual] = useState(false);
 
@@ -370,6 +371,25 @@ export default function StudioTemplate() {
 
       setGeneratedVariants(createdVariants);
 
+      // Generate signed URLs for all variants
+      const urlsMap = new Map();
+      for (const variant of createdVariants) {
+        if (variant.video_url) {
+          try {
+            const { data: signedData, error: signError } = await supabase.storage
+              .from("renders")
+              .createSignedUrl(variant.video_url, 3600); // 1 hour validity
+
+            if (!signError && signedData?.signedUrl) {
+              urlsMap.set(variant.id, signedData.signedUrl);
+            }
+          } catch (err) {
+            console.error("Error creating signed URL:", err);
+          }
+        }
+      }
+      setVariantSignedUrls(urlsMap);
+
       toast({
         title: `${numVariants} variantes generadas`,
         description: "Los videos están listos",
@@ -583,18 +603,38 @@ export default function StudioTemplate() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => window.open(variant.renderData?.videoUrl || variant.video_url, "_blank")}
+                          onClick={() => {
+                            const url = variantSignedUrls.get(variant.id);
+                            if (url) {
+                              window.open(url, "_blank");
+                            } else {
+                              toast({
+                                variant: "destructive",
+                                title: "Error",
+                                description: "URL del video no disponible",
+                              });
+                            }
+                          }}
                         >
                           Ver
                         </Button>
                         <Button
                           variant="default"
                           size="sm"
-                          onClick={() => {
-                            const link = document.createElement("a");
-                            link.href = variant.renderData?.videoUrl || variant.video_url;
-                            link.download = `variante-${idx + 1}.mp4`;
-                            link.click();
+                          onClick={async () => {
+                            const url = variantSignedUrls.get(variant.id);
+                            if (url) {
+                              const link = document.createElement("a");
+                              link.href = url;
+                              link.download = `variante-${idx + 1}.mp4`;
+                              link.click();
+                            } else {
+                              toast({
+                                variant: "destructive",
+                                title: "Error",
+                                description: "URL del video no disponible",
+                              });
+                            }
                           }}
                         >
                           Descargar
