@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -40,6 +41,7 @@ export function ApplyToBrandSection({
   analysis,
   onClose,
 }: ApplyToBrandSectionProps) {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [selectedBrandId, setSelectedBrandId] = useState("");
   const [folders, setFolders] = useState<BrollFolder[]>([]);
@@ -191,6 +193,8 @@ export function ApplyToBrandSection({
       const { data: project, error: projectError } = await supabase
         .from("projects")
         .insert({
+          user_id: user?.id,
+          name: `Proyecto - ${brands?.find(b => b.id === selectedBrandId)?.name || "Sin nombre"}`,
           brand_id: selectedBrandId,
           analysis_id: analysisData.id,
           generated_script: sections.map((s: any) => s.text).join("\n\n"),

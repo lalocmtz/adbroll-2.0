@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import {
   Dialog,
   DialogContent,
@@ -32,6 +33,7 @@ export function SaveTemplateDialog({
   onOpenChange,
   analysis,
 }: SaveTemplateDialogProps) {
+  const { user } = useAuth();
   const [templateName, setTemplateName] = useState("");
   const [selectedBrandId, setSelectedBrandId] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -70,6 +72,7 @@ export function SaveTemplateDialog({
       const { data: template, error: templateError } = await supabase
         .from("templates")
         .insert({
+          user_id: user?.id,
           name: templateName,
           description: `Plantilla generada desde video analizado (Marca: ${brands?.find(b => b.id === selectedBrandId)?.name})`,
           use_case: structure.hook?.type || "General",
