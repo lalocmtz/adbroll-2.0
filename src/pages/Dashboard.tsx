@@ -1,6 +1,4 @@
-import { Card } from "@/components/ui/card";
-import { Video } from "lucide-react";
-import { DashboardStudio } from "@/components/dashboard/studio/DashboardStudio";
+import { DashboardStudio } from "@/components/dashboard/DashboardStudio";
 
 const Dashboard = () => {
   return (
