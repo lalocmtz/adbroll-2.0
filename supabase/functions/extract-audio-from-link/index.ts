@@ -9,7 +9,7 @@ const corsHeaders = {
 
 interface ExtractRequest {
   video_url: string;
-  brand_id: string | null;
+  brand_id: string;
 }
 
 serve(async (req) => {
@@ -20,8 +20,8 @@ serve(async (req) => {
   try {
     const { video_url, brand_id }: ExtractRequest = await req.json();
 
-    if (!video_url) {
-      throw new Error("video_url is required");
+    if (!video_url || !brand_id) {
+      throw new Error("video_url and brand_id are required");
     }
 
     console.log("[EXTRACT] Starting extraction for URL:", video_url);
@@ -44,7 +44,7 @@ serve(async (req) => {
       .from("video_analyses")
       .insert({
         user_id: user.id,
-        brand_id: brand_id || null,
+        brand_id: brand_id,
         source_url: video_url,
         status: "processing",
       })
