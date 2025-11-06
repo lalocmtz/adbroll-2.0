@@ -59,8 +59,25 @@ export function ApplyToBrandSection({
     },
   });
 
-  const structure = analysis.structure as any;
-  const sections = structure.sections || [];
+  // Fetch full analysis if only ID is provided
+  const { data: fullAnalysis, isLoading: isLoadingAnalysis } = useQuery({
+    queryKey: ["video-analysis", analysis.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("video_analyses")
+        .select("*")
+        .eq("id", analysis.id)
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !analysis.structure, // Only fetch if structure is not provided
+  });
+
+  const analysisData = fullAnalysis || analysis;
+  const structure = analysisData.structure as any;
+  const sections = structure?.sections || [];
 
   useEffect(() => {
     // Initialize assignments for each section
@@ -150,7 +167,7 @@ export function ApplyToBrandSection({
     );
   };
 
-  const handleProceed = () => {
+  const handleProceed = async () => {
     const unassigned = assignments.filter((a) => !a.clipId);
 
     if (unassigned.length > 0) {
@@ -158,18 +175,54 @@ export function ApplyToBrandSection({
       return;
     }
 
-    // Navigate to Studio with assignments
-    navigate("/studio", {
-      state: {
-        analysisId: analysis.id,
-        brandId: selectedBrandId,
-        assignments: assignments,
-      },
-    });
+    try {
+      // Create slots_data from assignments
+      const slotsData: any = {};
+      assignments.forEach((assignment, index) => {
+        const section = sections[index];
+        slotsData[`section-${index}`] = {
+          type: section.type,
+          clipId: assignment.clipId,
+          text: section.text,
+        };
+      });
+
+      // Create project with analysis
+      const { data: project, error: projectError } = await supabase
+        .from("projects")
+        .insert({
+          brand_id: selectedBrandId,
+          analysis_id: analysisData.id,
+          generated_script: sections.map((s: any) => s.text).join("\n\n"),
+          slots_data: slotsData,
+          status: "draft",
+        } as any)
+        .select()
+        .single();
+
+      if (projectError) throw projectError;
+
+      toast.success("Proyecto creado exitosamente");
+      navigate(`/studio/${project.id}`);
+    } catch (error: any) {
+      console.error("Error creating project:", error);
+      toast.error("Error al crear el proyecto: " + error.message);
+    }
   };
 
   const allAssigned = assignments.every((a) => a.clipId !== null);
   const hasWarnings = validationWarnings.length > 0;
+
+  if (isLoadingAnalysis) {
+    return (
+      <Card className="p-8">
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent" />
+          <p className="mt-4 text-muted-foreground">Cargando análisis...</p>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card className="p-6 mt-6 space-y-6">

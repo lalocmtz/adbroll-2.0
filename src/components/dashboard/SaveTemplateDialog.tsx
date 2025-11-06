@@ -71,10 +71,9 @@ export function SaveTemplateDialog({
         .from("templates")
         .insert({
           name: templateName,
-          description: `Plantilla generada desde video analizado`,
+          description: `Plantilla generada desde video analizado (Marca: ${brands?.find(b => b.id === selectedBrandId)?.name})`,
           use_case: structure.hook?.type || "General",
           is_public: false,
-          brand_id: selectedBrandId,
         })
         .select()
         .single();

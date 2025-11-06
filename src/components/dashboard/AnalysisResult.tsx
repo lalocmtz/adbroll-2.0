@@ -6,15 +6,14 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, Save, Wand2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SaveTemplateDialog } from "./SaveTemplateDialog";
-import { ApplyToBrandSection } from "./ApplyToBrandSection";
 
 interface AnalysisResultProps {
   analysisId: string;
+  onApplyToBrand: () => void;
 }
 
-export function AnalysisResult({ analysisId }: AnalysisResultProps) {
+export function AnalysisResult({ analysisId, onApplyToBrand }: AnalysisResultProps) {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [showApplySection, setShowApplySection] = useState(false);
   const { data: analysis, isLoading } = useQuery({
     queryKey: ["video-analysis", analysisId],
     queryFn: async () => {
@@ -27,6 +26,9 @@ export function AnalysisResult({ analysisId }: AnalysisResultProps) {
       if (error) throw error;
       return data;
     },
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: Infinity,
   });
 
   if (isLoading) {
@@ -67,7 +69,7 @@ export function AnalysisResult({ analysisId }: AnalysisResultProps) {
               <Save className="w-4 h-4 mr-2" />
               Guardar como plantilla
             </Button>
-            <Button onClick={() => setShowApplySection(true)}>
+            <Button onClick={onApplyToBrand}>
               <Wand2 className="w-4 h-4 mr-2" />
               Aplicar a mi marca
             </Button>
@@ -97,12 +99,9 @@ export function AnalysisResult({ analysisId }: AnalysisResultProps) {
                 {section.duration || section.end_time - section.start_time}s
               </span>
             </div>
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold">Guion completo:</h4>
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                {section.text}
-              </p>
-            </div>
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">
+              {section.text}
+            </p>
           </div>
         ))}
       </div>
@@ -113,13 +112,6 @@ export function AnalysisResult({ analysisId }: AnalysisResultProps) {
         onOpenChange={setShowSaveDialog}
         analysis={analysis}
       />
-
-      {showApplySection && analysis && (
-        <ApplyToBrandSection
-          analysis={analysis}
-          onClose={() => setShowApplySection(false)}
-        />
-      )}
     </>
   );
 }
