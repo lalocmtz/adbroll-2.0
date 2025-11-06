@@ -10,7 +10,7 @@ const corsHeaders = {
 
 interface AnalyzeRequest {
   video_url?: string;
-  brand_id: string;
+  brand_id?: string | null;
   analysis_id?: string;
   video_file_path?: string;
 }
@@ -23,11 +23,11 @@ serve(async (req) => {
   try {
     const { video_url, brand_id, analysis_id, video_file_path }: AnalyzeRequest = await req.json();
 
-    if (!brand_id) {
-      throw new Error("brand_id is required");
+    if (!analysis_id) {
+      throw new Error("analysis_id is required");
     }
 
-    console.log("[ANALYZE] Starting analysis for brand:", brand_id);
+    console.log("[ANALYZE] Starting analysis for analysis_id:", analysis_id, "brand_id:", brand_id || "none");
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -45,14 +45,20 @@ serve(async (req) => {
     } = await supabase.auth.getUser(token);
     if (userError || !user) throw new Error("Unauthorized");
 
-    // Get brand context
-    const { data: brand, error: brandError } = await supabase
-      .from("brands")
-      .select("*")
-      .eq("id", brand_id)
-      .single();
+    // Get brand context (optional)
+    let brand = null;
+    if (brand_id) {
+      const { data: brandData, error: brandError } = await supabase
+        .from("brands")
+        .select("*")
+        .eq("id", brand_id)
+        .maybeSingle();
 
-    if (brandError || !brand) throw new Error("Brand not found");
+      if (!brandError && brandData) {
+        brand = brandData;
+        console.log("[ANALYZE] Using brand context:", brand.name);
+      }
+    }
 
     // Get or create analysis record
     let analysis;
@@ -114,6 +120,7 @@ serve(async (req) => {
     const analysisPrompt = `
 Eres un experto en análisis de anuncios de video.
 
+${brand ? `
 CONTEXTO DE LA MARCA:
 - Producto: ${brand.product_description || "No especificado"}
 - Promesa: ${brand.main_promise || "No especificado"}
@@ -121,6 +128,10 @@ CONTEXTO DE LA MARCA:
 - Beneficio: ${brand.main_benefit || "No especificado"}
 - Objeción: ${brand.main_objection || "No especificado"}
 - Tono: ${brand.tone_of_voice || "professional"}
+` : `
+ANÁLISIS GENÉRICO:
+Analiza la estructura del video sin adaptarlo a ninguna marca específica.
+`}
 
 TRANSCRIPCIÓN DEL VIDEO:
 ${transcription}
